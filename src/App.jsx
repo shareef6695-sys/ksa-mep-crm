@@ -177,7 +177,7 @@ function LoginLandingPage({ onLoginSuccess }) {
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-400/20 text-blue-300 text-[11px] font-semibold tracking-wide uppercase mb-4 sm:mb-8">
             <Building2 className="w-3.5 h-3.5" />
-            KSA â€¢ Internal Operations Portal
+            KSA Ã¢â‚¬Â¢ Internal Operations Portal
           </div>
 
           <h1 className="text-2xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-white leading-tight">
@@ -193,7 +193,7 @@ function LoginLandingPage({ onLoginSuccess }) {
           <div className="hidden sm:grid sm:grid-cols-2 gap-4 max-w-2xl mt-8">
             <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
               <div className="flex items-center gap-2 text-blue-400 font-semibold text-sm mb-1">
-                <Globe className="w-4 h-4" /> Multi-Currency RFQ â†’ SAR
+                <Globe className="w-4 h-4" /> Multi-Currency RFQ Ã¢â€ â€™ SAR
               </div>
               <p className="text-xs text-slate-400 leading-relaxed">
                 Source vendor pricing in USD, EUR, GBP, AED, or SAR and calculate 15% KSA VAT quotes.
@@ -227,7 +227,7 @@ function LoginLandingPage({ onLoginSuccess }) {
         </div>
 
         <div className="hidden lg:flex mt-12 pt-6 border-t border-slate-800/80 items-center justify-between text-xs text-slate-500">
-          <span>Â© {new Date().getFullYear()} Horizon Business Solutions Est.</span>
+          <span>Ã‚Â© {new Date().getFullYear()} Horizon Business Solutions Est.</span>
           <span>Secured by Supabase</span>
         </div>
       </div>
@@ -281,7 +281,7 @@ function LoginLandingPage({ onLoginSuccess }) {
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
+                    placeholder="Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢"
                     className="w-full pl-10 pr-12 py-3 bg-slate-950 border border-slate-700 rounded-xl text-base sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                   />
                   <button
@@ -442,17 +442,7 @@ export default function App() {
           .order('updated_at', { ascending: false });
 
         if (!error && inqRows) {
-          if (inqRows.length === 0) {
-            const seedPayload = SEED_INQUIRIES.map((item) => ({
-              id: item.id,
-              data: item,
-              updated_by: 'System Seed',
-            }));
-            await supabase.from('inquiries').upsert(seedPayload);
-            if (isMounted) setInquiries(SEED_INQUIRIES);
-          } else if (isMounted) {
-            setInquiries(inqRows.map((r) => r.data));
-          }
+          if (isMounted) { setInquiries(inqRows.map((r) => r.data)); }
         }
         if (isMounted) setSyncStatus('live');
       } catch {
@@ -782,7 +772,7 @@ export default function App() {
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 truncate">
-                {profile?.full_name} â€¢ <span className="text-blue-300">{profile?.role_label}</span>
+                {profile?.full_name} Ã¢â‚¬Â¢ <span className="text-blue-300">{profile?.role_label}</span>
               </p>
             </div>
           </div>
@@ -993,7 +983,7 @@ export default function App() {
                       <div className="text-[11px] text-slate-400">Total (Incl. 15% VAT)</div>
                       <div className="text-base font-bold text-slate-900">SAR {formatSAR(fin.grandTotalSAR)}</div>
                       <div className="text-[11px] text-emerald-600 font-medium">
-                        Margin {inq.marginPercent}% â€¢ Profit SAR {formatSAR(fin.profitSAR)}
+                        Margin {inq.marginPercent}% Ã¢â‚¬Â¢ Profit SAR {formatSAR(fin.profitSAR)}
                       </div>
                     </div>
 
@@ -1080,9 +1070,9 @@ export default function App() {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-blue-300 font-semibold">
                   <span>{selectedInquiry.refNo}</span>
-                  <span>â€¢</span>
+                  <span>Ã¢â‚¬Â¢</span>
                   <span>{selectedInquiry.division}</span>
-                  <span>â€¢</span>
+                  <span>Ã¢â‚¬Â¢</span>
                   <span>{selectedInquiry.assignedSalesName}</span>
                 </div>
                 <h2 className="text-lg sm:text-xl font-bold mt-1 truncate">{selectedInquiry.clientName}</h2>
@@ -1161,7 +1151,7 @@ export default function App() {
                 return (
                   <div className="space-y-5">
                     <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-bold text-slate-800">BOQ Line Items (Multi-Currency â†’ SAR)</h3>
+                      <h3 className="text-sm font-bold text-slate-800">BOQ Line Items (Multi-Currency Ã¢â€ â€™ SAR)</h3>
                       <button
                         onClick={handleAddBoqRow}
                         className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-semibold flex items-center gap-1 cursor-pointer"
@@ -1382,7 +1372,7 @@ export default function App() {
                         <div className="text-right">
                           <div className="font-bold text-sm text-slate-900">{vq.currency} {formatSAR(vq.amount)}</div>
                           <div className="text-xs text-slate-500">
-                            â‰ˆ SAR {formatSAR(vq.amount * (fxRates[vq.currency] || 1))}
+                            Ã¢â€°Ë† SAR {formatSAR(vq.amount * (fxRates[vq.currency] || 1))}
                           </div>
                         </div>
                       </div>
@@ -1458,7 +1448,7 @@ export default function App() {
                       {(selectedInquiry.followUps || []).map((f) => (
                         <div key={f.id} className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
                           <div className="flex items-center justify-between text-xs">
-                            <span className="font-bold text-blue-700">{f.channel} â€¢ {f.by}</span>
+                            <span className="font-bold text-blue-700">{f.channel} Ã¢â‚¬Â¢ {f.by}</span>
                             <span className="text-[11px] text-slate-400">{new Date(f.at).toLocaleDateString()}</span>
                           </div>
                           <p className="text-xs text-slate-700 leading-relaxed">{f.note}</p>
