@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import {
-  Search, Plus, Phone, Mail, MessageSquare, CheckCircle2, Clock,
-  AlertTriangle, Building2, DollarSign, ShieldCheck, Users, Filter,
-  ChevronRight, X, Send, Calculator, FileText, Lock, Eye, EyeOff,
-  LogOut, RefreshCw, Sparkles, ArrowRight, Layers, Globe
+  Search, Plus, Phone, Mail, MessageSquare, CheckCircle2,
+  AlertTriangle, Building2, ShieldCheck,
+  ChevronRight, X, Send, Lock, Eye, EyeOff,
+  LogOut, RefreshCw, ArrowRight, Layers, Globe,
+  LayoutList, UserCheck, ChevronDown, ChevronUp, Trash2
 } from 'lucide-react';
 
 // ============================================================================
@@ -19,26 +20,25 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // CONSTANTS & PIPELINE STAGES
 // ============================================================================
 const STAGES = [
-  { id: 'new_inquiry', label: '1. New Inquiry', owner: 'Salesman', badge: 'bg-slate-100 text-slate-700 border-slate-300' },
-  { id: 'rfq_suppliers', label: '2. Supplier RFQ', owner: 'Purchase', badge: 'bg-amber-50 text-amber-800 border-amber-300' },
-  { id: 'manager_approval', label: '3. Manager Approval', owner: 'Manager', badge: 'bg-purple-50 text-purple-800 border-purple-300' },
-  { id: 'quoted', label: '4. Quoted (SAR)', owner: 'Sales / Coord', badge: 'bg-blue-50 text-blue-800 border-blue-300' },
-  { id: 'follow_up', label: '5. Active Follow-Up', owner: 'Coordinator', badge: 'bg-indigo-50 text-indigo-800 border-indigo-300' },
-  { id: 'won', label: '6. Won / PO Received', owner: 'All Team', badge: 'bg-emerald-50 text-emerald-800 border-emerald-300' },
-  { id: 'lost', label: '7. Closed / Lost', owner: 'All Team', badge: 'bg-rose-50 text-rose-800 border-rose-300' },
+  { id: 'new_inquiry', label: '1. New Inquiry', short: 'New', owner: 'Salesman', badge: 'bg-slate-100 text-slate-700 border-slate-300' },
+  { id: 'rfq_suppliers', label: '2. Supplier RFQ', short: 'RFQ', owner: 'Purchase', badge: 'bg-amber-50 text-amber-800 border-amber-300' },
+  { id: 'manager_approval', label: '3. Manager Approval', short: 'Approval', owner: 'Manager', badge: 'bg-purple-50 text-purple-800 border-purple-300' },
+  { id: 'quoted', label: '4. Quoted (SAR)', short: 'Quoted', owner: 'Sales / Coord', badge: 'bg-blue-50 text-blue-800 border-blue-300' },
+  { id: 'follow_up', label: '5. Active Follow-Up', short: 'Follow-Up', owner: 'Coordinator', badge: 'bg-indigo-50 text-indigo-800 border-indigo-300' },
+  { id: 'won', label: '6. Won / PO Received', short: 'Won', owner: 'All Team', badge: 'bg-emerald-50 text-emerald-800 border-emerald-300' },
+  { id: 'lost', label: '7. Closed / Lost', short: 'Lost', owner: 'All Team', badge: 'bg-rose-50 text-rose-800 border-rose-300' },
 ];
 
 const ROLES = [
-  { key: 'all', label: 'All Team Pipeline' },
-  { key: 'sales_mep', label: 'Salesman 1 (MEP)' },
-  { key: 'sales_it', label: 'Salesman 2 (IT & ELV)' },
-  { key: 'purchase', label: 'Purchase Officer' },
-  { key: 'coordinator', label: 'Sales Coordinator' },
-  { key: 'manager', label: 'Sales Manager' },
+  { key: 'all', label: 'All Pipeline', short: 'All' },
+  { key: 'sales_mep', label: 'Salesman 1 (MEP)', short: 'MEP' },
+  { key: 'sales_it', label: 'Salesman 2 (IT)', short: 'IT/ELV' },
+  { key: 'purchase', label: 'Purchase Officer', short: 'Purchase' },
+  { key: 'coordinator', label: 'Sales Coordinator', short: 'Coord' },
+  { key: 'manager', label: 'Sales Manager', short: 'Manager' },
 ];
 
 const CURRENCIES = ['SAR', 'USD', 'EUR', 'GBP', 'AED'];
-
 const DEFAULT_FX = { SAR: 1, USD: 3.75, EUR: 4.08, GBP: 4.78, AED: 1.021 };
 
 const SEED_INQUIRIES = [
@@ -69,7 +69,7 @@ const SEED_INQUIRIES = [
     ],
     followUps: [
       { id: 'f1', channel: 'Email', note: 'BOQ received and forwarded to Purchase for European pump sizing.', by: 'Tariq Al-Harbi', at: new Date(Date.now() - 86400000 * 2).toISOString() },
-      { id: 'f2', channel: 'WhatsApp', note: 'Supplier pricing updated in EUR & USD. Submitted for Sales Manager verbal/system approval.', by: 'Khalid Al-Qahtani', at: new Date(Date.now() - 3600000 * 6).toISOString() },
+      { id: 'f2', channel: 'WhatsApp', note: 'Supplier pricing updated in EUR & USD. Submitted for Sales Manager approval.', by: 'Khalid Al-Qahtani', at: new Date(Date.now() - 3600000 * 6).toISOString() },
     ],
   },
   {
@@ -88,7 +88,7 @@ const SEED_INQUIRIES = [
     approvedBy: 'Omar Al-Ghamdi',
     approvedAt: new Date(Date.now() - 86400000 * 3).toISOString(),
     createdAt: new Date(Date.now() - 86400000 * 5).toISOString(),
-    lastFollowUpAt: new Date(Date.now() - 3600000 * 54).toISOString(), // >48h overdue alert
+    lastFollowUpAt: new Date(Date.now() - 3600000 * 54).toISOString(),
     boqItems: [
       { id: 'b3', desc: '48-Port PoE+ Layer 3 Core Switch + Dual PSU', qty: 4, unit: 'Nos', buyCurrency: 'USD', buyUnitCost: 1850, supplier: 'TechDisti Middle East' },
       { id: 'b4', desc: '4MP Outdoor Bullet IP Camera IP67 + Pole Mount', qty: 24, unit: 'Nos', buyCurrency: 'USD', buyUnitCost: 145, supplier: 'SecureVision Dubai' },
@@ -109,6 +109,12 @@ const SEED_INQUIRIES = [
 // ============================================================================
 const formatSAR = (num) =>
   new Intl.NumberFormat('en-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num || 0);
+
+const formatCompactSAR = (num) => {
+  if (num >= 1000000) return `${(num / 1000000).toFixed(2)}M`;
+  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+  return formatSAR(num);
+};
 
 const computeFinancials = (inquiry, fxRates) => {
   const totalCostSAR = (inquiry.boqItems || []).reduce((sum, item) => {
@@ -132,7 +138,7 @@ const isFollowUpOverdue = (inquiry) => {
 };
 
 // ============================================================================
-// LOGIN LANDING PAGE COMPONENT
+// LOGIN LANDING PAGE COMPONENT (MOBILE + DESKTOP RESPONSIVE)
 // ============================================================================
 function LoginLandingPage({ onLoginSuccess }) {
   const [email, setEmail] = useState('');
@@ -157,7 +163,7 @@ function LoginLandingPage({ onLoginSuccess }) {
       } else if (data?.user) {
         onLoginSuccess(data.user);
       }
-    } catch (err) {
+    } catch {
       setErrorMsg('Unable to connect to authentication server.');
     } finally {
       setLoading(false);
@@ -166,91 +172,89 @@ function LoginLandingPage({ onLoginSuccess }) {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col lg:flex-row">
-      {/* Left Brand & Workflow Showcase */}
-      <div className="lg:w-7/12 p-8 lg:p-16 flex flex-col justify-between bg-gradient-to-br from-slate-900 via-slate-900 to-blue-950 border-b lg:border-b-0 lg:border-r border-slate-800">
+      {/* Top Brand Header on Mobile / Left Showcase on Desktop */}
+      <div className="lg:w-7/12 p-6 sm:p-10 lg:p-16 flex flex-col justify-between bg-gradient-to-br from-slate-900 via-slate-900 to-blue-950 border-b lg:border-b-0 lg:border-r border-slate-800">
         <div>
-          <div className="inline-flex items-center gap-3 px-3.5 py-1.5 rounded-full bg-blue-500/10 border border-blue-400/20 text-blue-300 text-xs font-semibold tracking-wide uppercase mb-8">
-            <Building2 className="w-4 h-4" />
-            Kingdom of Saudi Arabia â€¢ Internal Operations Portal
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-400/20 text-blue-300 text-[11px] font-semibold tracking-wide uppercase mb-4 sm:mb-8">
+            <Building2 className="w-3.5 h-3.5" />
+            KSA â€¢ Internal Operations Portal
           </div>
 
-          <h1 className="text-3xl lg:text-5xl font-bold tracking-tight text-white leading-tight">
+          <h1 className="text-2xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-white leading-tight">
             Horizon Business Solutions Est.
           </h1>
-          <p className="mt-4 text-lg text-slate-300 max-w-xl leading-relaxed">
-            Unified Sales, Multi-Currency Procurement &amp; Client Follow-Up Workspace for{' '}
+          <p className="mt-2.5 sm:mt-4 text-sm sm:text-lg text-slate-300 max-w-xl leading-relaxed">
+            Sales, Multi-Currency Procurement &amp; Follow-Up Workspace for{' '}
             <span className="text-white font-semibold">MEP</span> and{' '}
-            <span className="text-white font-semibold">IT / ELV</span> Trading Divisions.
+            <span className="text-white font-semibold">IT / ELV</span> Trading.
           </p>
 
-          <div className="mt-10 grid sm:grid-cols-2 gap-4 max-w-2xl">
+          {/* Feature Grid (Hidden on very small screens to keep login form above the fold) */}
+          <div className="hidden sm:grid sm:grid-cols-2 gap-4 max-w-2xl mt-8">
             <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
-              <div className="flex items-center gap-2.5 text-blue-400 font-semibold text-sm mb-1.5">
+              <div className="flex items-center gap-2 text-blue-400 font-semibold text-sm mb-1">
                 <Globe className="w-4 h-4" /> Multi-Currency RFQ â†’ SAR
               </div>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Source vendor pricing in USD, EUR, GBP, AED, or SAR and generate accurate SAR quotes with 15% KSA VAT.
+                Source vendor pricing in USD, EUR, GBP, AED, or SAR and calculate 15% KSA VAT quotes.
               </p>
             </div>
-
             <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
-              <div className="flex items-center gap-2.5 text-purple-400 font-semibold text-sm mb-1.5">
+              <div className="flex items-center gap-2 text-purple-400 font-semibold text-sm mb-1">
                 <ShieldCheck className="w-4 h-4" /> Sales Manager Sign-Off
               </div>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Built-in verbal and system approval checkpoint before releasing final commercial proposals.
+                Built-in verbal and system approval checkpoint before releasing final client quotes.
               </p>
             </div>
-
             <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
-              <div className="flex items-center gap-2.5 text-emerald-400 font-semibold text-sm mb-1.5">
+              <div className="flex items-center gap-2 text-emerald-400 font-semibold text-sm mb-1">
                 <Phone className="w-4 h-4" /> Coordinator Follow-Up Hub
               </div>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Track phone, email, and WhatsApp Business follow-ups with automatic 48-hour SLA alerts.
+                One-tap call, email, and WhatsApp Business follow-ups with 48-hour SLA alerts.
               </p>
             </div>
-
             <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
-              <div className="flex items-center gap-2.5 text-amber-400 font-semibold text-sm mb-1.5">
-                <Layers className="w-4 h-4" /> Full Team Transparency
+              <div className="flex items-center gap-2 text-amber-400 font-semibold text-sm mb-1">
+                <Layers className="w-4 h-4" /> Live Mobile &amp; Desktop Sync
               </div>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Real-time visibility across Salesmen, Purchase Officer, Sales Coordinator, and Management.
+                Instant updates across all 5 team roles in the office or on client sites.
               </p>
             </div>
           </div>
         </div>
 
-        <div className="mt-12 pt-6 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-4 text-xs text-slate-500">
-          <span>Â© {new Date().getFullYear()} Horizon Business Solutions Est. All rights reserved.</span>
-          <span>Secured by Supabase Row-Level Security</span>
+        <div className="hidden lg:flex mt-12 pt-6 border-t border-slate-800/80 items-center justify-between text-xs text-slate-500">
+          <span>Â© {new Date().getFullYear()} Horizon Business Solutions Est.</span>
+          <span>Secured by Supabase</span>
         </div>
       </div>
 
-      {/* Right Sign-In Form */}
-      <div className="lg:w-5/12 p-8 lg:p-16 flex items-center justify-center bg-slate-950">
+      {/* Sign-In Form */}
+      <div className="flex-1 lg:w-5/12 p-5 sm:p-10 lg:p-16 flex items-center justify-center bg-slate-950">
         <div className="w-full max-w-md">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl">
-            <div className="w-12 h-12 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 mb-6">
-              <Lock className="w-6 h-6" />
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl">
+            <div className="w-11 h-11 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 mb-4">
+              <Lock className="w-5 h-5" />
             </div>
 
-            <h2 className="text-2xl font-bold text-white">Team Member Sign In</h2>
-            <p className="text-sm text-slate-400 mt-1">
-              Enter your assigned Horizon corporate credentials to access the live pipeline.
+            <h2 className="text-xl sm:text-2xl font-bold text-white">Team Member Sign In</h2>
+            <p className="text-xs sm:text-sm text-slate-400 mt-1">
+              Sign in with your Horizon corporate email and password.
             </p>
 
             {errorMsg && (
-              <div className="mt-5 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2.5">
+              <div className="mt-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2">
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
                 <span>{errorMsg}</span>
               </div>
             )}
 
-            <form onSubmit={handleSignIn} className="mt-6 space-y-5">
+            <form onSubmit={handleSignIn} className="mt-5 space-y-4">
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
                   Work Email Address
                 </label>
                 <div className="relative">
@@ -261,13 +265,13 @@ function LoginLandingPage({ onLoginSuccess }) {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="name@horizon-ksa.com"
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    className="w-full pl-10 pr-4 py-3 bg-slate-950 border border-slate-700 rounded-xl text-base sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
                   Password
                 </label>
                 <div className="relative">
@@ -278,13 +282,12 @@ function LoginLandingPage({ onLoginSuccess }) {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
-                    className="w-full pl-10 pr-11 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    className="w-full pl-10 pr-12 py-3 bg-slate-950 border border-slate-700 rounded-xl text-base sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-200 p-0.5"
-                    aria-label="Toggle password visibility"
+                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-200 p-1"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -294,7 +297,7 @@ function LoginLandingPage({ onLoginSuccess }) {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white font-semibold text-sm flex items-center justify-center gap-2 transition shadow-lg shadow-blue-600/20 cursor-pointer"
+                className="w-full py-3.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 active:bg-blue-700 disabled:opacity-60 text-white font-semibold text-sm flex items-center justify-center gap-2 transition shadow-lg shadow-blue-600/20 cursor-pointer"
               >
                 {loading ? (
                   <>
@@ -307,12 +310,6 @@ function LoginLandingPage({ onLoginSuccess }) {
                 )}
               </button>
             </form>
-
-            <div className="mt-6 pt-5 border-t border-slate-800 text-center">
-              <p className="text-xs text-slate-500">
-                Access restricted to authorized Horizon Business Solutions Est. staff. Need an account? Contact your Sales Manager.
-              </p>
-            </div>
           </div>
         </div>
       </div>
@@ -321,7 +318,7 @@ function LoginLandingPage({ onLoginSuccess }) {
 }
 
 // ============================================================================
-// MAIN CRM APPLICATION
+// MAIN CRM APPLICATION (MOBILE-FIRST + DESKTOP)
 // ============================================================================
 export default function App() {
   const [session, setSession] = useState(null);
@@ -338,6 +335,7 @@ export default function App() {
   const [selectedId, setSelectedId] = useState(null);
   const [activeTab, setActiveTab] = useState('boq');
   const [showNewModal, setShowNewModal] = useState(false);
+  const [showMobileFx, setShowMobileFx] = useState(false);
 
   // New Inquiry Form State
   const [newInq, setNewInq] = useState({
@@ -352,11 +350,9 @@ export default function App() {
     firstItemUnit: 'Nos',
   });
 
-  // Follow-up Form State
+  // Follow-up & Vendor Quote Form States
   const [fuChannel, setFuChannel] = useState('Phone');
   const [fuNote, setFuNote] = useState('');
-
-  // Vendor Quote Form State
   const [vqSupplier, setVqSupplier] = useState('');
   const [vqCurrency, setVqCurrency] = useState('USD');
   const [vqAmount, setVqAmount] = useState('');
@@ -398,8 +394,6 @@ export default function App() {
 
       if (data) {
         setProfile(data);
-        // Default view: Manager sees 'all', staff sees 'all' with their own actions highlighted
-        setActiveRoleFilter('all');
       } else {
         setProfile({
           id: user.id,
@@ -427,13 +421,11 @@ export default function App() {
   // --------------------------------------------------------------------------
   useEffect(() => {
     if (!session) return;
-
     let isMounted = true;
 
     const fetchInitialData = async () => {
       setSyncStatus('syncing');
       try {
-        // Fetch FX Settings
         const { data: settingsData } = await supabase
           .from('app_settings')
           .select('value')
@@ -444,7 +436,6 @@ export default function App() {
           setFxRates(settingsData.value);
         }
 
-        // Fetch Inquiries
         const { data: inqRows, error } = await supabase
           .from('inquiries')
           .select('*')
@@ -452,7 +443,6 @@ export default function App() {
 
         if (!error && inqRows) {
           if (inqRows.length === 0) {
-            // Seed initial demo records into Supabase so the team starts with clear examples
             const seedPayload = SEED_INQUIRIES.map((item) => ({
               id: item.id,
               data: item,
@@ -472,7 +462,6 @@ export default function App() {
 
     fetchInitialData();
 
-    // Realtime subscription for inquiries & FX rates
     const channel = supabase
       .channel('horizon-crm-realtime')
       .on(
@@ -509,7 +498,7 @@ export default function App() {
   }, [session]);
 
   // --------------------------------------------------------------------------
-  // 3. PERSISTENCE HELPERS (SAVE TO SUPABASE)
+  // 3. PERSISTENCE HELPERS
   // --------------------------------------------------------------------------
   const saveInquiryToCloud = async (updatedInquiry) => {
     setInquiries((prev) => prev.map((i) => (i.id === updatedInquiry.id ? updatedInquiry : i)));
@@ -589,7 +578,7 @@ export default function App() {
   );
 
   // --------------------------------------------------------------------------
-  // 5. ACTION HANDLERS (CREATE, BOQ, APPROVAL, FOLLOW-UP)
+  // 5. ACTION HANDLERS
   // --------------------------------------------------------------------------
   const handleCreateInquiry = async (e) => {
     e.preventDefault();
@@ -687,6 +676,13 @@ export default function App() {
     updateSelectedField({ boqItems: [...selectedInquiry.boqItems, newRow] });
   };
 
+  const handleRemoveBoqRow = (itemId) => {
+    if (!selectedInquiry || selectedInquiry.boqItems.length <= 1) return;
+    updateSelectedField({
+      boqItems: selectedInquiry.boqItems.filter((item) => item.id !== itemId),
+    });
+  };
+
   const handleAddVendorQuote = (e) => {
     e.preventDefault();
     if (!selectedInquiry || !vqSupplier || !vqAmount) return;
@@ -747,10 +743,10 @@ export default function App() {
   // --------------------------------------------------------------------------
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
+      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-4">
         <div className="flex items-center gap-3 text-slate-300">
           <RefreshCw className="w-5 h-5 animate-spin text-blue-400" />
-          <span className="text-sm font-medium">Loading Horizon Business Solutions Portal...</span>
+          <span className="text-sm font-medium">Loading Horizon Portal...</span>
         </div>
       </div>
     );
@@ -761,46 +757,53 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-20 sm:pb-8">
       {/* Top Corporate Navigation Bar */}
       <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center font-bold text-lg shadow-inner">
+        <div className="max-w-7xl mx-auto px-3.5 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-600 flex items-center justify-center font-bold text-base sm:text-lg shrink-0">
               H
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="font-bold text-base sm:text-lg tracking-tight">
-                  Horizon Business Solutions Est.
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <h1 className="font-bold text-sm sm:text-lg tracking-tight truncate">
+                  Horizon Business Solutions
                 </h1>
                 <span
-                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium shrink-0 ${
                     syncStatus === 'live'
                       ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                       : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                   }`}
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
-                  {syncStatus === 'live' ? 'Live Sync' : 'Syncing...'}
+                  <span className="hidden xs:inline">{syncStatus === 'live' ? 'Live' : 'Sync'}</span>
                 </span>
               </div>
-              <p className="text-xs text-slate-400">MEP &amp; IT Trading â€¢ Sales, Multi-Currency RFQ &amp; Follow-Up CRM</p>
+              <p className="text-[11px] text-slate-400 truncate">
+                {profile?.full_name} â€¢ <span className="text-blue-300">{profile?.role_label}</span>
+              </p>
             </div>
           </div>
 
-          {/* Logged-in User Badge & Sign Out */}
-          <div className="flex items-center gap-3">
-            <div className="text-right hidden sm:block">
-              <div className="text-xs font-semibold text-white">{profile?.full_name}</div>
-              <div className="text-[11px] text-blue-300">{profile?.role_label}</div>
-            </div>
+          {/* Right Header Controls */}
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+            <button
+              onClick={() => setShowMobileFx(!showMobileFx)}
+              className="sm:hidden px-2.5 py-2 rounded-xl bg-slate-800 text-amber-300 text-xs font-semibold flex items-center gap-1"
+            >
+              <Globe className="w-3.5 h-3.5" /> FX
+              {showMobileFx ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
+
             <button
               onClick={() => setShowNewModal(true)}
-              className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+              className="hidden sm:flex px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold items-center gap-1.5 transition cursor-pointer"
             >
               <Plus className="w-4 h-4" /> New Inquiry
             </button>
+
             <button
               onClick={handleSignOut}
               title="Sign Out"
@@ -811,25 +814,27 @@ export default function App() {
           </div>
         </div>
 
-        {/* FX Exchange Rates Strip (Buying Multi-Currency -> SAR) */}
-        <div className="bg-slate-950/90 border-t border-slate-800/80 px-4 sm:px-6 py-2">
-          <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2 text-slate-400 font-medium">
+        {/* FX Exchange Rates Strip (Always visible on Desktop, collapsible on Mobile) */}
+        <div className={`${showMobileFx ? 'block' : 'hidden'} sm:block bg-slate-950/95 border-t border-slate-800/80 px-3.5 sm:px-6 py-2.5`}>
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-1.5 text-slate-400 font-medium">
               <Globe className="w-3.5 h-3.5 text-blue-400" />
-              <span>FX Conversion to SAR (Shared Live):</span>
+              <span>FX to SAR (Shared Live):</span>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
               {['USD', 'EUR', 'GBP', 'AED'].map((curr) => (
-                <label key={curr} className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-lg">
-                  <span className="text-slate-400 font-semibold">1 {curr} =</span>
+                <label
+                  key={curr}
+                  className="flex items-center justify-between sm:justify-start gap-1.5 bg-slate-900 border border-slate-800 px-2.5 py-1.5 sm:py-1 rounded-lg"
+                >
+                  <span className="text-slate-400 font-semibold">1 {curr}</span>
                   <input
                     type="number"
                     step="0.001"
                     value={fxRates[curr] ?? ''}
                     onChange={(e) => handleFxChange(curr, e.target.value)}
-                    className="w-16 bg-transparent text-amber-300 font-bold focus:outline-none text-right"
+                    className="w-16 bg-transparent text-amber-300 font-bold focus:outline-none text-right text-base sm:text-xs"
                   />
-                  <span className="text-slate-500">SAR</span>
                 </label>
               ))}
             </div>
@@ -838,42 +843,54 @@ export default function App() {
       </header>
 
       {/* Main Content Container */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-        {/* KPI Summary Strip */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-            <div className="text-xs font-medium text-slate-500">Active Pipeline (Incl. 15% VAT)</div>
-            <div className="mt-1 text-xl font-bold text-slate-900">SAR {formatSAR(kpis.activePipelineSAR)}</div>
+      <main className="max-w-7xl mx-auto px-3.5 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
+        {/* Compact 2x2 KPI Grid on Mobile, 4-Col on Desktop */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+          <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm">
+            <div className="text-[11px] sm:text-xs font-medium text-slate-500">Active Pipeline</div>
+            <div className="mt-0.5 sm:mt-1 text-base sm:text-xl font-bold text-slate-900">
+              <span className="sm:hidden">SAR {formatCompactSAR(kpis.activePipelineSAR)}</span>
+              <span className="hidden sm:inline">SAR {formatSAR(kpis.activePipelineSAR)}</span>
+            </div>
           </div>
-          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-            <div className="text-xs font-medium text-slate-500">Won / PO Received</div>
-            <div className="mt-1 text-xl font-bold text-emerald-600">SAR {formatSAR(kpis.wonSAR)}</div>
+          <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm">
+            <div className="text-[11px] sm:text-xs font-medium text-slate-500">Won / POs</div>
+            <div className="mt-0.5 sm:mt-1 text-base sm:text-xl font-bold text-emerald-600">
+              <span className="sm:hidden">SAR {formatCompactSAR(kpis.wonSAR)}</span>
+              <span className="hidden sm:inline">SAR {formatSAR(kpis.wonSAR)}</span>
+            </div>
           </div>
-          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-            <div className="text-xs font-medium text-slate-500">Awaiting Manager Approval</div>
-            <div className="mt-1 text-xl font-bold text-purple-600">{kpis.pendingApprovalCount} Quotes</div>
+          <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm">
+            <div className="text-[11px] sm:text-xs font-medium text-slate-500">Manager Approval</div>
+            <div className="mt-0.5 sm:mt-1 text-base sm:text-xl font-bold text-purple-600">
+              {kpis.pendingApprovalCount} Pending
+            </div>
           </div>
-          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-            <div className="text-xs font-medium text-slate-500">Overdue Follow-Ups (&gt;48h)</div>
-            <div className="mt-1 text-xl font-bold text-rose-600">{kpis.overdueFollowUpsCount} Alerts</div>
+          <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm">
+            <div className="text-[11px] sm:text-xs font-medium text-slate-500">Follow-Up Alerts</div>
+            <div className="mt-0.5 sm:mt-1 text-base sm:text-xl font-bold text-rose-600">
+              {kpis.overdueFollowUpsCount} Overdue
+            </div>
           </div>
         </div>
 
-        {/* Role View Tabs & Search */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-1.5">
+        {/* Horizontal Scrollable Role & Stage Filters */}
+        <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            {/* Swipeable Role Pills */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
               {ROLES.map((r) => (
                 <button
                   key={r.key}
                   onClick={() => setActiveRoleFilter(r.key)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer shrink-0 ${
                     activeRoleFilter === r.key
                       ? 'bg-slate-900 text-white shadow-sm'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
-                  {r.label}
+                  <span className="sm:hidden">{r.short}</span>
+                  <span className="hidden sm:inline">{r.label}</span>
                 </button>
               ))}
             </div>
@@ -885,20 +902,20 @@ export default function App() {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search client, ref, division..."
-                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-blue-500"
+                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs focus:outline-none focus:border-blue-500"
               />
             </div>
           </div>
 
-          {/* Stage Filter Pills */}
-          <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100">
+          {/* Swipeable Stage Filter Pills */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pt-2 border-t border-slate-100 pb-0.5">
             <button
               onClick={() => setStageFilter('all')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-medium cursor-pointer ${
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap shrink-0 cursor-pointer ${
                 stageFilter === 'all' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
-              All Stages ({inquiries.length})
+              All ({inquiries.length})
             </button>
             {STAGES.map((st) => {
               const count = inquiries.filter((i) => i.stage === st.id).length;
@@ -906,22 +923,23 @@ export default function App() {
                 <button
                   key={st.id}
                   onClick={() => setStageFilter(st.id)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-medium cursor-pointer ${
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap shrink-0 cursor-pointer ${
                     stageFilter === st.id ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
                   }`}
                 >
-                  {st.label} ({count})
+                  <span className="sm:hidden">{st.short} ({count})</span>
+                  <span className="hidden sm:inline">{st.label} ({count})</span>
                 </button>
               );
             })}
           </div>
         </div>
 
-        {/* Inquiries Pipeline List */}
+        {/* Inquiries Pipeline Cards */}
         <div className="grid gap-3">
           {filteredInquiries.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-500 text-sm">
-              No inquiries match the current role or stage filter.
+            <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-slate-500 text-sm">
+              No inquiries match the selected role or stage filter.
             </div>
           ) : (
             filteredInquiries.map((inq) => {
@@ -936,48 +954,77 @@ export default function App() {
                     setSelectedId(inq.id);
                     setActiveTab('boq');
                   }}
-                  className="bg-white hover:border-blue-400 border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm transition cursor-pointer flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+                  className="bg-white active:bg-slate-50 hover:border-blue-400 border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm transition cursor-pointer flex flex-col lg:flex-row lg:items-center justify-between gap-3.5"
                 >
                   <div className="space-y-1.5">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-md border border-blue-200">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
                         {inq.refNo}
                       </span>
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
+                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
                         {inq.division}
                       </span>
-                      <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border ${stageMeta.badge}`}>
+                      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${stageMeta.badge}`}>
                         {stageMeta.label}
                       </span>
                       {inq.managerApproved && (
                         <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                          <CheckCircle2 className="w-3 h-3" /> Manager Approved
+                          <CheckCircle2 className="w-3 h-3" /> Approved
                         </span>
                       )}
                       {overdue && (
                         <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full">
-                          <AlertTriangle className="w-3 h-3" /> Follow-Up Overdue (&gt;48h)
+                          <AlertTriangle className="w-3 h-3" /> &gt;48h Due
                         </span>
                       )}
                     </div>
 
-                    <h3 className="text-base font-bold text-slate-900">{inq.clientName}</h3>
-                    <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500">
+                    <h3 className="text-base font-bold text-slate-900 leading-snug">{inq.clientName}</h3>
+
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
                       <span>Contact: <strong className="text-slate-700">{inq.contactPerson}</strong></span>
                       <span>Sales: <strong className="text-slate-700">{inq.assignedSalesName}</strong></span>
-                      <span>Action Owner: <strong className="text-blue-700">{stageMeta.owner}</strong></span>
+                      <span>Next: <strong className="text-blue-700">{stageMeta.owner}</strong></span>
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between lg:justify-end gap-6 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-100">
+                  <div className="flex items-center justify-between lg:justify-end gap-4 pt-2.5 lg:pt-0 border-t lg:border-t-0 border-slate-100">
                     <div className="text-left lg:text-right">
-                      <div className="text-[11px] text-slate-400">Quote Total (Incl. 15% VAT)</div>
+                      <div className="text-[11px] text-slate-400">Total (Incl. 15% VAT)</div>
                       <div className="text-base font-bold text-slate-900">SAR {formatSAR(fin.grandTotalSAR)}</div>
                       <div className="text-[11px] text-emerald-600 font-medium">
-                        Margin: {inq.marginPercent}% (SAR {formatSAR(fin.profitSAR)})
+                        Margin {inq.marginPercent}% â€¢ Profit SAR {formatSAR(fin.profitSAR)}
                       </div>
                     </div>
-                    <ChevronRight className="w-5 h-5 text-slate-400" />
+
+                    {/* Quick Mobile Call / WhatsApp Action Buttons */}
+                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                      <a
+                        href={`tel:${inq.phone}`}
+                        className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700"
+                        title="Call Client"
+                      >
+                        <Phone className="w-4 h-4" />
+                      </a>
+                      <a
+                        href={`https://wa.me/${inq.phone.replace(/[^0-9]/g, '')}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="p-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700"
+                        title="WhatsApp Client"
+                      >
+                        <MessageSquare className="w-4 h-4" />
+                      </a>
+                      <button
+                        onClick={() => {
+                          setSelectedId(inq.id);
+                          setActiveTab('boq');
+                        }}
+                        className="p-2.5 rounded-xl bg-blue-50 text-blue-600"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -987,42 +1034,81 @@ export default function App() {
       </main>
 
       {/* ==================================================================== */}
-      {/* INQUIRY WORKSPACE DRAWER / MODAL                                     */}
+      {/* MOBILE FIXED BOTTOM NAVIGATION BAR                                   */}
+      {/* ==================================================================== */}
+      <nav className="sm:hidden fixed bottom-0 inset-x-0 bg-slate-900 text-slate-300 border-t border-slate-800 z-30 flex items-center justify-around py-2 px-2">
+        <button
+          onClick={() => {
+            setActiveRoleFilter('all');
+            setStageFilter('all');
+          }}
+          className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl text-[11px] font-medium ${
+            activeRoleFilter === 'all' ? 'text-blue-400' : 'text-slate-400'
+          }`}
+        >
+          <LayoutList className="w-5 h-5" />
+          <span>All Deals</span>
+        </button>
+
+        <button
+          onClick={() => setActiveRoleFilter(profile?.role_key || 'all')}
+          className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl text-[11px] font-medium ${
+            activeRoleFilter !== 'all' ? 'text-blue-400' : 'text-slate-400'
+          }`}
+        >
+          <UserCheck className="w-5 h-5" />
+          <span>My Queue</span>
+        </button>
+
+        <button
+          onClick={() => setShowNewModal(true)}
+          className="flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-blue-600 text-white text-xs font-bold shadow-lg shadow-blue-600/30"
+        >
+          <Plus className="w-4 h-4" />
+          <span>New Inquiry</span>
+        </button>
+      </nav>
+
+      {/* ==================================================================== */}
+      {/* FULL-SCREEN MOBILE / SLIDE-OVER DESKTOP INQUIRY WORKSPACE            */}
       {/* ==================================================================== */}
       {selectedInquiry && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-40 flex justify-end">
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-40 flex justify-end">
           <div className="bg-white w-full max-w-4xl h-full overflow-y-auto shadow-2xl flex flex-col">
-            {/* Drawer Header */}
-            <div className="p-5 bg-slate-900 text-white flex items-start justify-between gap-4 sticky top-0 z-10">
-              <div>
-                <div className="flex items-center gap-2 text-xs text-blue-300 font-semibold">
+            {/* Workspace Header */}
+            <div className="p-4 sm:p-5 bg-slate-900 text-white flex items-start justify-between gap-3 sticky top-0 z-10">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-blue-300 font-semibold">
                   <span>{selectedInquiry.refNo}</span>
                   <span>â€¢</span>
                   <span>{selectedInquiry.division}</span>
                   <span>â€¢</span>
-                  <span>Sales: {selectedInquiry.assignedSalesName}</span>
+                  <span>{selectedInquiry.assignedSalesName}</span>
                 </div>
-                <h2 className="text-xl font-bold mt-1">{selectedInquiry.clientName}</h2>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  {selectedInquiry.contactPerson} â€¢ {selectedInquiry.phone} â€¢ {selectedInquiry.email}
-                </p>
+                <h2 className="text-lg sm:text-xl font-bold mt-1 truncate">{selectedInquiry.clientName}</h2>
+                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300 mt-1">
+                  <span>{selectedInquiry.contactPerson}</span>
+                  <a href={`tel:${selectedInquiry.phone}`} className="text-blue-300 underline">
+                    {selectedInquiry.phone}
+                  </a>
+                </div>
               </div>
               <button
                 onClick={() => setSelectedId(null)}
-                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
+                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 shrink-0 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Stage Progression & Sales Manager Verbal/System Approval Bar */}
-            <div className="p-4 bg-slate-100 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+            {/* Stage Selector & Sales Manager Approval */}
+            <div className="p-3.5 sm:p-4 bg-slate-100 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-slate-600">Pipeline Stage:</span>
+                <span className="text-xs font-semibold text-slate-600 shrink-0">Stage:</span>
                 <select
                   value={selectedInquiry.stage}
                   onChange={(e) => updateSelectedField({ stage: e.target.value })}
-                  className="bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-500"
+                  className="w-full sm:w-auto bg-white border border-slate-300 rounded-xl px-3 py-2 text-base sm:text-xs font-semibold text-slate-800"
                 >
                   {STAGES.map((s) => (
                     <option key={s.id} value={s.id}>
@@ -1033,31 +1119,31 @@ export default function App() {
               </div>
 
               {selectedInquiry.managerApproved ? (
-                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-100 text-emerald-800 text-xs font-semibold">
+                <div className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-100 text-emerald-800 text-xs font-semibold">
                   <ShieldCheck className="w-4 h-4" />
                   Approved by {selectedInquiry.approvedBy}
                 </div>
               ) : (
                 <button
                   onClick={handleManagerApprove}
-                  className="px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+                  className="w-full sm:w-auto px-3.5 py-2.5 sm:py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
                 >
                   <ShieldCheck className="w-4 h-4" /> Record Sales Manager Approval
                 </button>
               )}
             </div>
 
-            {/* Drawer Tabs */}
-            <div className="px-5 border-b border-slate-200 flex gap-6 bg-white">
+            {/* Horizontal Scrollable Workspace Tabs */}
+            <div className="px-4 sm:px-5 border-b border-slate-200 flex gap-5 bg-white overflow-x-auto shrink-0">
               {[
-                { id: 'boq', label: '1. BOQ, Multi-Currency Costing & SAR Quote' },
+                { id: 'boq', label: '1. BOQ & SAR Quote' },
                 { id: 'vendors', label: `2. Supplier RFQs (${selectedInquiry.vendorQuotes?.length || 0})` },
-                { id: 'followup', label: `3. Coordinator Follow-Ups (${selectedInquiry.followUps?.length || 0})` },
+                { id: 'followup', label: `3. Follow-Ups (${selectedInquiry.followUps?.length || 0})` },
               ].map((t) => (
                 <button
                   key={t.id}
                   onClick={() => setActiveTab(t.id)}
-                  className={`py-3 text-xs font-semibold border-b-2 transition cursor-pointer ${
+                  className={`py-3 text-xs font-semibold border-b-2 whitespace-nowrap transition cursor-pointer ${
                     activeTab === t.id
                       ? 'border-blue-600 text-blue-600'
                       : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -1068,14 +1154,14 @@ export default function App() {
               ))}
             </div>
 
-            {/* Drawer Body */}
-            <div className="p-6 flex-1 space-y-6">
+            {/* Workspace Body */}
+            <div className="p-4 sm:p-6 flex-1 space-y-6 pb-16">
               {activeTab === 'boq' && (() => {
                 const fin = computeFinancials(selectedInquiry, fxRates);
                 return (
-                  <div className="space-y-6">
+                  <div className="space-y-5">
                     <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-bold text-slate-800">BOQ Line Items (Multi-Currency Purchase â†’ SAR)</h3>
+                      <h3 className="text-sm font-bold text-slate-800">BOQ Line Items (Multi-Currency â†’ SAR)</h3>
                       <button
                         onClick={handleAddBoqRow}
                         className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-semibold flex items-center gap-1 cursor-pointer"
@@ -1084,7 +1170,68 @@ export default function App() {
                       </button>
                     </div>
 
-                    <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                    {/* Mobile Stacked BOQ Cards */}
+                    <div className="sm:hidden space-y-3">
+                      {selectedInquiry.boqItems.map((item, idx) => {
+                        const rowSAR = (Number(item.qty) || 0) * (Number(item.buyUnitCost) || 0) * (fxRates[item.buyCurrency] || 1);
+                        return (
+                          <div key={item.id} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50 space-y-2.5">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-bold text-slate-500">Item #{idx + 1}</span>
+                              {selectedInquiry.boqItems.length > 1 && (
+                                <button onClick={() => handleRemoveBoqRow(item.id)} className="text-rose-500 p-1">
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                            <input
+                              type="text"
+                              value={item.desc}
+                              onChange={(e) => handleBoqItemChange(item.id, 'desc', e.target.value)}
+                              className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-2 text-base"
+                              placeholder="Item description"
+                            />
+                            <div className="grid grid-cols-3 gap-2">
+                              <div>
+                                <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Qty</label>
+                                <input
+                                  type="number"
+                                  value={item.qty}
+                                  onChange={(e) => handleBoqItemChange(item.id, 'qty', parseFloat(e.target.value) || 0)}
+                                  className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-base"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Currency</label>
+                                <select
+                                  value={item.buyCurrency}
+                                  onChange={(e) => handleBoqItemChange(item.id, 'buyCurrency', e.target.value)}
+                                  className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-base font-semibold"
+                                >
+                                  {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Unit Cost</label>
+                                <input
+                                  type="number"
+                                  value={item.buyUnitCost}
+                                  onChange={(e) => handleBoqItemChange(item.id, 'buyUnitCost', parseFloat(e.target.value) || 0)}
+                                  className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-base"
+                                />
+                              </div>
+                            </div>
+                            <div className="flex justify-between items-center pt-1.5 border-t border-slate-200 text-xs">
+                              <span className="text-slate-500">Line Total (SAR):</span>
+                              <span className="font-bold text-slate-900">SAR {formatSAR(rowSAR)}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Desktop BOQ Table */}
+                    <div className="hidden sm:block overflow-x-auto border border-slate-200 rounded-xl">
                       <table className="w-full text-xs text-left">
                         <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
                           <tr>
@@ -1122,9 +1269,7 @@ export default function App() {
                                     onChange={(e) => handleBoqItemChange(item.id, 'buyCurrency', e.target.value)}
                                     className="w-full border border-slate-200 rounded px-1.5 py-1 bg-white font-semibold"
                                   >
-                                    {CURRENCIES.map((c) => (
-                                      <option key={c} value={c}>{c}</option>
-                                    ))}
+                                    {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
                                   </select>
                                 </td>
                                 <td className="p-2">
@@ -1145,9 +1290,9 @@ export default function App() {
                       </table>
                     </div>
 
-                    {/* Margin & KSA VAT Calculation Box */}
-                    <div className="bg-slate-900 text-white rounded-2xl p-5 grid sm:grid-cols-2 gap-6">
-                      <div className="space-y-3">
+                    {/* Margin & KSA VAT Calculation Card */}
+                    <div className="bg-slate-900 text-white rounded-2xl p-4 sm:p-5 grid sm:grid-cols-2 gap-4 sm:gap-6">
+                      <div className="space-y-2">
                         <label className="block text-xs text-slate-400 font-semibold uppercase">
                           Target Gross Margin (%)
                         </label>
@@ -1159,18 +1304,18 @@ export default function App() {
                             className="w-24 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-base font-bold text-amber-300"
                           />
                           <span className="text-xs text-slate-400">
-                            Gross Profit: <strong className="text-emerald-400">SAR {formatSAR(fin.profitSAR)}</strong>
+                            Profit: <strong className="text-emerald-400">SAR {formatSAR(fin.profitSAR)}</strong>
                           </span>
                         </div>
                       </div>
 
                       <div className="space-y-1.5 text-xs border-t sm:border-t-0 sm:border-l border-slate-800 pt-3 sm:pt-0 sm:pl-6">
                         <div className="flex justify-between text-slate-400">
-                          <span>Total Landed Cost (SAR):</span>
+                          <span>Landed Cost (SAR):</span>
                           <span>SAR {formatSAR(fin.totalCostSAR)}</span>
                         </div>
                         <div className="flex justify-between text-slate-200 font-semibold">
-                          <span>Net Selling Price (Excl. VAT):</span>
+                          <span>Net Selling (Excl. VAT):</span>
                           <span>SAR {formatSAR(fin.sellNetSAR)}</span>
                         </div>
                         <div className="flex justify-between text-slate-400">
@@ -1178,7 +1323,7 @@ export default function App() {
                           <span>SAR {formatSAR(fin.vatSAR)}</span>
                         </div>
                         <div className="flex justify-between text-base font-bold text-blue-400 pt-2 border-t border-slate-800">
-                          <span>Customer Quote Total:</span>
+                          <span>Customer Total:</span>
                           <span>SAR {formatSAR(fin.grandTotalSAR)}</span>
                         </div>
                       </div>
@@ -1188,21 +1333,21 @@ export default function App() {
               })()}
 
               {activeTab === 'vendors' && (
-                <div className="space-y-5">
-                  <form onSubmit={handleAddVendorQuote} className="bg-slate-50 p-4 rounded-xl border border-slate-200 grid sm:grid-cols-4 gap-3">
+                <div className="space-y-4">
+                  <form onSubmit={handleAddVendorQuote} className="bg-slate-50 p-3.5 sm:p-4 rounded-xl border border-slate-200 grid sm:grid-cols-4 gap-2.5">
                     <input
                       type="text"
                       required
                       placeholder="Supplier Name"
                       value={vqSupplier}
                       onChange={(e) => setVqSupplier(e.target.value)}
-                      className="border border-slate-300 rounded-lg px-3 py-2 text-xs bg-white"
+                      className="border border-slate-300 rounded-lg px-3 py-2 text-base sm:text-xs bg-white"
                     />
                     <div className="flex gap-1.5">
                       <select
                         value={vqCurrency}
                         onChange={(e) => setVqCurrency(e.target.value)}
-                        className="border border-slate-300 rounded-lg px-2 py-2 text-xs bg-white font-semibold"
+                        className="border border-slate-300 rounded-lg px-2 py-2 text-base sm:text-xs bg-white font-semibold"
                       >
                         {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
                       </select>
@@ -1212,7 +1357,7 @@ export default function App() {
                         placeholder="Total Quote"
                         value={vqAmount}
                         onChange={(e) => setVqAmount(e.target.value)}
-                        className="w-full border border-slate-300 rounded-lg px-2.5 py-2 text-xs bg-white"
+                        className="w-full border border-slate-300 rounded-lg px-2.5 py-2 text-base sm:text-xs bg-white"
                       />
                     </div>
                     <input
@@ -1220,16 +1365,16 @@ export default function App() {
                       placeholder="Lead Time (e.g. 2 Weeks)"
                       value={vqLeadTime}
                       onChange={(e) => setVqLeadTime(e.target.value)}
-                      className="border border-slate-300 rounded-lg px-3 py-2 text-xs bg-white"
+                      className="border border-slate-300 rounded-lg px-3 py-2 text-base sm:text-xs bg-white"
                     />
-                    <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold py-2 cursor-pointer">
+                    <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold py-2.5 sm:py-2 cursor-pointer">
                       + Add Vendor Quote
                     </button>
                   </form>
 
                   <div className="space-y-2.5">
                     {(selectedInquiry.vendorQuotes || []).map((vq) => (
-                      <div key={vq.id} className="p-3.5 rounded-xl border border-slate-200 flex items-center justify-between">
+                      <div key={vq.id} className="p-3.5 rounded-xl border border-slate-200 flex items-center justify-between gap-2">
                         <div>
                           <div className="font-bold text-sm text-slate-900">{vq.supplier}</div>
                           <div className="text-xs text-slate-500">Delivery: {vq.leadTime}</div>
@@ -1249,24 +1394,33 @@ export default function App() {
               {activeTab === 'followup' && (() => {
                 const fin = computeFinancials(selectedInquiry, fxRates);
                 const waTemplate = `Dear ${selectedInquiry.contactPerson}, greetings from Horizon Business Solutions Est. Following up on our quotation ${selectedInquiry.refNo} for ${selectedInquiry.clientName} (Total: SAR ${formatSAR(fin.grandTotalSAR)} incl. 15% VAT). Kindly let us know if you need any technical clarification or delivery schedule update.`;
+                const waUrl = `https://wa.me/${selectedInquiry.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(waTemplate)}`;
+
                 return (
-                  <div className="space-y-5">
-                    {/* Quick WhatsApp / Email Copy Template */}
-                    <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 space-y-2">
-                      <div className="flex items-center justify-between">
+                  <div className="space-y-4">
+                    {/* Direct One-Tap WhatsApp Launch + Template */}
+                    <div className="p-3.5 sm:p-4 rounded-xl bg-emerald-50 border border-emerald-200 space-y-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="text-xs font-bold text-emerald-900 flex items-center gap-1.5">
-                          <MessageSquare className="w-4 h-4" /> Ready-to-Send WhatsApp / Email Follow-Up Template
+                          <MessageSquare className="w-4 h-4" /> WhatsApp / Email Template
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            navigator.clipboard?.writeText(waTemplate);
-                            setFuNote(waTemplate);
-                          }}
-                          className="text-xs font-semibold text-emerald-700 hover:underline cursor-pointer"
-                        >
-                          Copy to Logger
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setFuNote(waTemplate)}
+                            className="px-2.5 py-1 rounded-lg bg-white border border-emerald-300 text-xs font-semibold text-emerald-800 cursor-pointer"
+                          >
+                            Use in Log
+                          </button>
+                          <a
+                            href={waUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-xs font-semibold"
+                          >
+                            Open WhatsApp
+                          </a>
+                        </div>
                       </div>
                       <p className="text-xs text-emerald-800 leading-relaxed">{waTemplate}</p>
                     </div>
@@ -1276,7 +1430,7 @@ export default function App() {
                       <select
                         value={fuChannel}
                         onChange={(e) => setFuChannel(e.target.value)}
-                        className="border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold bg-white"
+                        className="border border-slate-300 rounded-xl px-3 py-2.5 sm:py-2 text-base sm:text-xs font-semibold bg-white"
                       >
                         <option value="Phone">Phone Call</option>
                         <option value="WhatsApp">WhatsApp</option>
@@ -1288,26 +1442,26 @@ export default function App() {
                         required
                         value={fuNote}
                         onChange={(e) => setFuNote(e.target.value)}
-                        placeholder="Log customer feedback, PO status, or next follow-up date..."
-                        className="flex-1 border border-slate-300 rounded-xl px-3.5 py-2 text-xs"
+                        placeholder="Log client response or next follow-up..."
+                        className="flex-1 border border-slate-300 rounded-xl px-3.5 py-2.5 sm:py-2 text-base sm:text-xs"
                       />
                       <button
                         type="submit"
-                        className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
+                        className="px-4 py-2.5 sm:py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
                       >
                         <Send className="w-3.5 h-3.5" /> Log Update
                       </button>
                     </form>
 
                     {/* Timeline */}
-                    <div className="space-y-3">
+                    <div className="space-y-2.5">
                       {(selectedInquiry.followUps || []).map((f) => (
                         <div key={f.id} className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
                           <div className="flex items-center justify-between text-xs">
                             <span className="font-bold text-blue-700">{f.channel} â€¢ {f.by}</span>
-                            <span className="text-slate-400">{new Date(f.at).toLocaleString()}</span>
+                            <span className="text-[11px] text-slate-400">{new Date(f.at).toLocaleDateString()}</span>
                           </div>
-                          <p className="text-xs text-slate-700">{f.note}</p>
+                          <p className="text-xs text-slate-700 leading-relaxed">{f.note}</p>
                         </div>
                       ))}
                     </div>
@@ -1320,19 +1474,19 @@ export default function App() {
       )}
 
       {/* ==================================================================== */}
-      {/* NEW INQUIRY MODAL                                                    */}
+      {/* NEW INQUIRY MODAL (MOBILE FRIENDLY)                                  */}
       {/* ==================================================================== */}
       {showNewModal && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-base font-bold text-slate-900">Log New Client Inquiry</h3>
-              <button onClick={() => setShowNewModal(false)} className="text-slate-400 hover:text-slate-700 cursor-pointer">
+              <button onClick={() => setShowNewModal(false)} className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateInquiry} className="space-y-3.5 text-xs">
+            <form onSubmit={handleCreateInquiry} className="space-y-3 text-xs">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Client / Company Name *</label>
                 <input
@@ -1341,11 +1495,11 @@ export default function App() {
                   value={newInq.clientName}
                   onChange={(e) => setNewInq({ ...newInq, clientName: e.target.value })}
                   placeholder="e.g. Saudi Arabian Contracting Co."
-                  className="w-full border border-slate-300 rounded-xl px-3 py-2"
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-base sm:text-xs"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Contact Person *</label>
                   <input
@@ -1354,18 +1508,18 @@ export default function App() {
                     value={newInq.contactPerson}
                     onChange={(e) => setNewInq({ ...newInq, contactPerson: e.target.value })}
                     placeholder="Eng. Name"
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2"
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-base sm:text-xs"
                   />
                 </div>
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Phone / WhatsApp *</label>
                   <input
-                    type="text"
+                    type="tel"
                     required
                     value={newInq.phone}
                     onChange={(e) => setNewInq({ ...newInq, phone: e.target.value })}
                     placeholder="+966 5X XXX XXXX"
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2"
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-base sm:text-xs"
                   />
                 </div>
               </div>
@@ -1382,7 +1536,7 @@ export default function App() {
                         assignedSalesKey: e.target.value === 'MEP' ? 'sales_mep' : 'sales_it',
                       })
                     }
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2 bg-white"
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-base sm:text-xs bg-white"
                   >
                     <option value="MEP">MEP Trading</option>
                     <option value="IT & ELV">IT &amp; ELV Services</option>
@@ -1393,10 +1547,10 @@ export default function App() {
                   <select
                     value={newInq.assignedSalesKey}
                     onChange={(e) => setNewInq({ ...newInq, assignedSalesKey: e.target.value })}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2 bg-white"
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-base sm:text-xs bg-white"
                   >
-                    <option value="sales_mep">Salesman 1 (MEP - Tariq)</option>
-                    <option value="sales_it">Salesman 2 (IT - Faisal)</option>
+                    <option value="sales_mep">Salesman 1 (MEP)</option>
+                    <option value="sales_it">Salesman 2 (IT)</option>
                   </select>
                 </div>
               </div>
@@ -1408,8 +1562,8 @@ export default function App() {
                   required
                   value={newInq.firstItemDesc}
                   onChange={(e) => setNewInq({ ...newInq, firstItemDesc: e.target.value })}
-                  placeholder="e.g. HVAC Chilled Water Pumps / Cisco Core Switches"
-                  className="w-full border border-slate-300 rounded-xl px-3 py-2"
+                  placeholder="e.g. HVAC Chilled Water Pumps / Core Switches"
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-base sm:text-xs"
                 />
               </div>
 
@@ -1417,15 +1571,15 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setShowNewModal(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 font-semibold cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-semibold cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold cursor-pointer"
+                  className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold cursor-pointer"
                 >
-                  Save &amp; Sync Inquiry
+                  Save &amp; Sync
                 </button>
               </div>
             </form>
