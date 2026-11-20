@@ -1353,7 +1353,7 @@ export default function App() {
                               Sales: {inq.assignedSalesName} ({inq.commissionPct || 0}% Share)
                             </span>
                           </div>
-                          <h3 className="text-base font-bold mt-1">{inq.clientName} <span className="ml-2"><ShareDocumentButtons company={company} customers={customers} docType="Quotation / RFQ" docNumber={inq.id} clientName={inq.clientName} division={inq.division} status={inq.status} directPhone={inq.phone} directEmail={inq.email} compact /></span></h3>
+                          <h3 className="text-base font-bold mt-1">{inq.clientName} <span className="ml-2"><button type="button" onClick={(e) => { e.stopPropagation(); setPreviewQuotation(inq); }} className="no-print px-2 py-1 text-[11px] rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-semibold inline-flex items-center gap-1 cursor-pointer transition mr-1"><span>Preview A4 Quote</span></button><ShareDocumentButtons company={company} customers={customers} docType="Quotation / RFQ" docNumber={inq.id} clientName={inq.clientName} division={inq.division} status={inq.status} directPhone={inq.phone} directEmail={inq.email} compact /></span></h3>
                           <p className="text-xs text-slate-500">{inq.contactPerson} • {inq.phone}</p>
                         </div>
 
@@ -1478,7 +1478,7 @@ export default function App() {
                       <div key={dn.id} className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3">
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded">{dn.dn_number}</span>
+                            <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded">{dn.dn_number} <div className="mt-1 inline-flex flex-wrap items-center gap-1"><button type="button" onClick={(e) => { e.stopPropagation(); setPreviewDN(dn); }} className="no-print px-2 py-1 text-[11px] rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-semibold inline-flex items-center gap-1 cursor-pointer transition"><span>Preview A4 DN</span></button><ShareDocumentButtons company={company} customers={customers} docType="Delivery Note" docNumber={dn.dn_number} clientName={dn.client_name} division={dn.division} status={dn.status || "Dispatched"} compact /></div></span>
                             <span className="text-xs uppercase font-semibold bg-slate-100 px-2 py-0.5 rounded">{dn.delivery_type} Delivery</span>
                             <span className="text-xs text-slate-500">Ref: {dn.so_number}</span>
                           </div>
