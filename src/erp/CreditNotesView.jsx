@@ -196,8 +196,7 @@ export function CreditNotesView({
                 </p>
               </div>
 
-              <button
-                onClick={() => setPreviewCN(cn)}
+              <ShareDocumentButtons company={company} docType="ZATCA Credit Note" docNumber={cn.credit_note_number} clientName={cn.client_name} totalSar={cn.grand_total_sar} compact /> <button onClick={() => setPreviewCN(cn)}
                 className="px-3 py-2 rounded-xl border border-slate-300 hover:bg-slate-50 text-xs font-semibold flex items-center gap-1.5 cursor-pointer self-start sm:self-center"
               >
                 <QrCode className="w-4 h-4" /> View ZATCA Credit Note

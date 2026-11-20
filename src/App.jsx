@@ -1352,7 +1352,7 @@ export default function App() {
                               Sales: {inq.assignedSalesName} ({inq.commissionPct || 0}% Share)
                             </span>
                           </div>
-                          <h3 className="text-base font-bold mt-1">{inq.clientName}</h3>
+                          <h3 className="text-base font-bold mt-1">{inq.clientName} <span className="ml-2"><ShareDocumentButtons company={company} customers={customers} docType="Quotation / RFQ" docNumber={inq.id} clientName={inq.clientName} division={inq.division} status={inq.status} directPhone={inq.phone} directEmail={inq.email} compact /></span></h3>
                           <p className="text-xs text-slate-500">{inq.contactPerson} • {inq.phone}</p>
                         </div>
 
@@ -1404,7 +1404,7 @@ export default function App() {
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded">{so.so_number} <span className={ml-1.5 text-[10px] px-1.5 py-0.5 rounded font-bold }>{so.division || 'MEP'}</span></span>
+                            <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded">{so.so_number} <span className={ml-1.5 text-[10px] px-1.5 py-0.5 rounded font-bold }>{so.division || 'MEP'}</span> <div className="mt-1"><ShareDocumentButtons company={company} customers={customers} docType="Sales Order" docNumber={so.so_number} clientName={so.client_name} division={so.division} totalSar={so.grand_total_sar} status={so.status} compact /></div></span>
                             <span className="text-xs font-semibold uppercase px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
                               {so.status.replace('_', ' ')}
                             </span>
@@ -1526,7 +1526,7 @@ export default function App() {
                       <div key={inv.id} className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div>
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded">{inv.invoice_number} <span className={ml-1.5 text-[10px] px-1.5 py-0.5 rounded font-bold }>{inv.division || 'MEP'}</span></span>
+                            <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded">{inv.invoice_number} <span className={ml-1.5 text-[10px] px-1.5 py-0.5 rounded font-bold }>{inv.division || 'MEP'}</span> <div className="mt-1"><ShareDocumentButtons company={company} customers={customers} docType="ZATCA Tax Invoice" docNumber={inv.invoice_number} clientName={inv.client_name} division={inv.division} totalSar={inv.grand_total_sar} status={inv.payment_status} compact /></div></span>
                             <span className="text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full">
                               ZATCA {inv.zatca_status === 'cleared' ? 'Phase 2 Cleared' : 'Phase 1 TLV QR'}
                             </span>
