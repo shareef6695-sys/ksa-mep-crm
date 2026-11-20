@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import {
-  Plus, Phone, MessageSquare, CheckCircle2,
-  AlertTriangle, Building2, ShieldCheck, X,
-  Lock, Eye, EyeOff, LogOut, RefreshCw, ArrowRight, Layers, Globe,
-  Trash2, Truck, Receipt, ShoppingBag, Percent, Settings, Printer, QrCode
+  Plus, AlertTriangle, Building2, X,
+  Lock, Eye, EyeOff, LogOut, RefreshCw, ArrowRight, Layers,
+  Truck, Receipt, ShoppingBag, Percent, Settings, Printer, QrCode,
+  ChevronDown, ChevronRight, Menu, PanelLeftClose, PanelLeftOpen,
+  FileText, CreditCard, PackageCheck, Users, Sliders
 } from 'lucide-react';
 import { generateZatcaQrBase64, getZatcaComplianceAdvice, formatSAR } from './erp/erpEngine';
 
@@ -158,15 +159,28 @@ export default function App() {
   const [fxRates, setFxRates] = useState(DEFAULT_FX);
   const [syncStatus, setSyncStatus] = useState('connecting');
 
-  const [activeModule, setActiveModule] = useState('crm');
+  // Left Sidebar Navigation State (Collapsible Main Modules & Sub-Modules)
+  const [activeSubModule, setActiveSubModule] = useState('sales_quotes');
+  const [expandedModules, setExpandedModules] = useState({
+    sales: true,
+    finance: true,
+    purchase: true,
+    profit_share: true,
+    settings: false,
+  });
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
+  // Core ERP Data Tables
   const [inquiries, setInquiries] = useState([]);
   const [salesOrders, setSalesOrders] = useState([]);
   const [deliveryNotes, setDeliveryNotes] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
+  const [receipts, setReceipts] = useState([]);
   const [commissions, setCommissions] = useState([]);
 
+  // Modals & Drawers
   const [selectedInqId, setSelectedInqId] = useState(null);
   const [showNewInqModal, setShowNewInqModal] = useState(false);
   const [newInq, setNewInq] = useState({
@@ -208,6 +222,75 @@ export default function App() {
 
   const [settingsSavedMsg, setSettingsSavedMsg] = useState('');
 
+  // Hierarchical ERP Navigation Tree
+  const navTree = useMemo(
+    () => [
+      {
+        id: 'sales',
+        label: '1. Sales & Fulfillment',
+        icon: Layers,
+        subModules: [
+          { id: 'sales_quotes', label: 'Inquiries & Quotes', icon: FileText, count: inquiries.length },
+          { id: 'sales_orders', label: 'Sales Orders (SO)', icon: ShoppingBag, count: salesOrders.length },
+          { id: 'sales_deliveries', label: 'Deliveries (Full/Partial)', icon: Truck, count: deliveryNotes.length },
+          { id: 'sales_invoices', label: 'ZATCA Invoices', icon: Receipt, count: invoices.length },
+        ],
+      },
+      {
+        id: 'finance',
+        label: '2. Finance & Collections',
+        icon: CreditCard,
+        subModules: [
+          { id: 'fin_collections', label: 'AR Customer Receipts', icon: CreditCard, count: receipts.length },
+          { id: 'fin_zatca_advisor', label: 'ZATCA Wave & VAT', icon: QrCode },
+        ],
+      },
+      {
+        id: 'purchase',
+        label: '3. Purchase Full Cycle',
+        icon: ShoppingBag,
+        subModules: [
+          { id: 'pur_orders', label: 'Purchase Orders (PO)', icon: FileText, count: purchaseOrders.filter((p) => p.status === 'po_issued').length },
+          { id: 'pur_grn', label: 'Goods Receipt (GRN)', icon: PackageCheck, count: purchaseOrders.filter((p) => p.status === 'grn_completed').length },
+          { id: 'pur_bills', label: 'Supplier Bills & Landed Cost', icon: Receipt, count: purchaseOrders.filter((p) => p.status === 'billed').length },
+        ],
+      },
+      {
+        id: 'profit_share',
+        label: '4. Sales Profit Share',
+        icon: Percent,
+        subModules: [
+          { id: 'comm_ledger', label: 'Collection Commission Ledger', icon: Percent, count: commissions.length },
+        ],
+      },
+      {
+        id: 'settings',
+        label: '5. Administration & Rules',
+        icon: Settings,
+        subModules: [
+          { id: 'set_company', label: 'Company & ZATCA Profile', icon: Sliders },
+          { id: 'set_salesmen', label: 'Salesman Profit Share %', icon: Users, count: teamProfiles.length },
+        ],
+      },
+    ],
+    [inquiries.length, salesOrders.length, deliveryNotes.length, invoices.length, receipts.length, purchaseOrders, commissions.length, teamProfiles.length]
+  );
+
+  const toggleMainModule = (modId) => {
+    if (sidebarCollapsed) {
+      setSidebarCollapsed(false);
+      setExpandedModules((prev) => ({ ...prev, [modId]: true }));
+      return;
+    }
+    setExpandedModules((prev) => ({ ...prev, [modId]: !prev[modId] }));
+  };
+
+  const selectSubModule = (modId, subId) => {
+    setExpandedModules((prev) => ({ ...prev, [modId]: true }));
+    setActiveSubModule(subId);
+    setMobileDrawerOpen(false);
+  };
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       setSession(s);
@@ -241,6 +324,7 @@ export default function App() {
       dnRes,
       invRes,
       poRes,
+      recRes,
       commRes,
       profRes,
     ] = await Promise.all([
@@ -250,6 +334,7 @@ export default function App() {
       supabase.from('delivery_notes').select('*').order('delivered_at', { ascending: false }),
       supabase.from('invoices').select('*').order('issued_at', { ascending: false }),
       supabase.from('purchase_orders').select('*').order('created_at', { ascending: false }),
+      supabase.from('customer_receipts').select('*').order('received_at', { ascending: false }),
       supabase.from('commission_ledger').select('*').order('updated_at', { ascending: false }),
       supabase.from('team_profiles').select('*').order('full_name'),
     ]);
@@ -265,6 +350,7 @@ export default function App() {
     if (dnRes.data) setDeliveryNotes(dnRes.data);
     if (invRes.data) setInvoices(invRes.data);
     if (poRes.data) setPurchaseOrders(poRes.data);
+    if (recRes.data) setReceipts(recRes.data);
     if (commRes.data) setCommissions(commRes.data);
     if (profRes.data) setTeamProfiles(profRes.data);
     setSyncStatus('live');
@@ -275,7 +361,7 @@ export default function App() {
     refreshAllErpData();
 
     const channel = supabase
-      .channel('horizon-erp-phase1')
+      .channel('horizon-erp-phase1-sidebar')
       .on('postgres_changes', { event: '*', schema: 'public' }, () => {
         refreshAllErpData();
       })
@@ -298,6 +384,7 @@ export default function App() {
     [annualTaxableRevenueSAR, company.zatcaPhase2Connected]
   );
 
+  // CRUD & Workflow Actions
   const handleCreateInquiry = async (e) => {
     e.preventDefault();
     const num = Math.floor(101 + Math.random() * 898);
@@ -397,7 +484,7 @@ export default function App() {
     await saveInquiryPatch(inq, { stage: 'won' });
 
     setSelectedInqId(null);
-    setActiveModule('sales_orders');
+    selectSubModule('sales', 'sales_orders');
     refreshAllErpData();
   };
 
@@ -442,7 +529,7 @@ export default function App() {
     if (deliveredLines.length === 0) return;
 
     const dnNum = `DN-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 8999)}`;
-    const newDN = {
+    await supabase.from('delivery_notes').insert({
       id: `dn-${Date.now()}`,
       dn_number: dnNum,
       so_id: deliveryModalSO.id,
@@ -452,9 +539,8 @@ export default function App() {
       items: deliveredLines,
       delivered_by: profile?.full_name || 'Logistics',
       notes: deliveryNotesText,
-    };
+    });
 
-    await supabase.from('delivery_notes').insert(newDN);
     await supabase
       .from('sales_orders')
       .update({
@@ -465,6 +551,7 @@ export default function App() {
       .eq('id', deliveryModalSO.id);
 
     setDeliveryModalSO(null);
+    selectSubModule('sales', 'sales_deliveries');
     refreshAllErpData();
   };
 
@@ -533,7 +620,7 @@ export default function App() {
       });
     }
 
-    setActiveModule('invoices');
+    selectSubModule('sales', 'sales_invoices');
     if (insertedInv) setPreviewInvoice(insertedInv);
     refreshAllErpData();
   };
@@ -625,14 +712,16 @@ export default function App() {
     });
 
     setShowNewPOModal(false);
+    selectSubModule('purchase', 'pur_orders');
     refreshAllErpData();
   };
 
-  const advancePurchaseStage = async (po, nextStatus, extraPatch = {}) => {
+  const advancePurchaseStage = async (po, nextStatus, extraPatch = {}, nextSubTab = null) => {
     await supabase
       .from('purchase_orders')
       .update({ status: nextStatus, ...extraPatch, updated_at: new Date().toISOString() })
       .eq('id', po.id);
+    if (nextSubTab) selectSubModule('purchase', nextSubTab);
     refreshAllErpData();
   };
 
@@ -672,228 +761,339 @@ export default function App() {
 
   const selectedInq = inquiries.find((i) => i.id === selectedInqId) || null;
 
-  return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-24 sm:pb-10">
-      <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-3.5 sm:px-6 py-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center font-bold text-base shrink-0">
-              H
-            </div>
+  // Reusable Sidebar Navigation Content (Used on Desktop Left Rail & Mobile Slide-Out Drawer)
+  const renderSidebarNav = (isMobile = false) => (
+    <div className="flex flex-col h-full bg-slate-900 text-slate-200 select-none">
+      {/* Brand Header */}
+      <div className="p-3.5 border-b border-slate-800 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-base shrink-0">
+            H
+          </div>
+          {(!sidebarCollapsed || isMobile) && (
             <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h1 className="font-bold text-sm sm:text-base truncate">{company.nameEn}</h1>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  ERP Phase 1 • {syncStatus === 'live' ? 'Live' : 'Sync'}
-                </span>
+              <div className="font-bold text-xs text-white truncate">{company.nameEn}</div>
+              <div className="text-[10px] text-emerald-400 font-semibold">
+                ERP Phase 1 • {syncStatus === 'live' ? 'Live' : 'Sync'}
               </div>
-              <p className="text-[11px] text-slate-400 truncate">
-                {profile?.full_name} ({profile?.role_label}) • VAT: {company.vatNumber}
-              </p>
             </div>
-          </div>
+          )}
+        </div>
 
-          <button
-            onClick={() => supabase.auth.signOut()}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
-            title="Sign Out"
-          >
-            <LogOut className="w-4 h-4" />
+        {isMobile ? (
+          <button onClick={() => setMobileDrawerOpen(false)} className="p-1.5 rounded-lg bg-slate-800 text-slate-300">
+            <X className="w-4 h-4" />
           </button>
-        </div>
+        ) : (
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
+            title={sidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+          >
+            {sidebarCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+          </button>
+        )}
+      </div>
 
-        <div className="bg-slate-950 border-t border-slate-800 px-3.5 sm:px-6">
-          <div className="max-w-7xl mx-auto flex items-center gap-1.5 overflow-x-auto py-2">
-            {[
-              { id: 'crm', label: '1. Quotes & CRM', icon: Layers, count: inquiries.length },
-              { id: 'sales_orders', label: '2. Sales Orders & Deliveries', icon: Truck, count: salesOrders.length },
-              { id: 'invoices', label: '3. ZATCA Invoices & AR', icon: Receipt, count: invoices.length },
-              { id: 'purchase', label: '4. Purchase Cycle', icon: ShoppingBag, count: purchaseOrders.length },
-              { id: 'profit_share', label: '5. Sales Profit Share', icon: Percent, count: commissions.length },
-              { id: 'settings', label: '6. Company & Salesman Rules', icon: Settings },
-            ].map((mod) => {
-              const Icon = mod.icon;
-              return (
-                <button
-                  key={mod.id}
-                  onClick={() => setActiveModule(mod.id)}
-                  className={`px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap flex items-center gap-1.5 transition cursor-pointer ${
-                    activeModule === mod.id
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-900'
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  <span>{mod.label}</span>
-                  {typeof mod.count === 'number' && (
-                    <span className="px-1.5 py-0.2 rounded-full bg-black/25 text-[10px]">{mod.count}</span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </header>
+      {/* Collapsible Main Modules & Sub-Modules Tree */}
+      <nav className="flex-1 overflow-y-auto p-2.5 space-y-1.5">
+        {navTree.map((mod) => {
+          const ModIcon = mod.icon;
+          const isExpanded = Boolean(expandedModules[mod.id]);
+          const hasActiveSub = mod.subModules.some((s) => s.id === activeSubModule);
 
-      <main className="max-w-7xl mx-auto px-3.5 sm:px-6 py-5 space-y-5">
-        <div className={`p-3.5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs ${zatcaAdvice.badgeClass}`}>
-          <div className="flex items-start sm:items-center gap-2">
-            <QrCode className="w-4 h-4 shrink-0 mt-0.5 sm:mt-0" />
-            <div>
-              <span className="font-bold">{zatcaAdvice.wave}: </span>
-              <span>{zatcaAdvice.statusText}</span>
-            </div>
-          </div>
-          <div className="font-bold whitespace-nowrap">
-            YTD Taxable Sales: SAR {formatSAR(annualTaxableRevenueSAR)}
-          </div>
-        </div>
-
-        {activeModule === 'crm' && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base sm:text-lg font-bold text-slate-900">Inquiries &amp; Commercial Quotations</h2>
+          return (
+            <div key={mod.id} className="space-y-1">
               <button
-                onClick={() => setShowNewInqModal(true)}
-                className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                onClick={() => toggleMainModule(mod.id)}
+                className={`w-full flex items-center justify-between px-2.5 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                  hasActiveSub
+                    ? 'bg-slate-800/90 text-white'
+                    : 'text-slate-300 hover:bg-slate-800/50 hover:text-white'
+                }`}
+                title={mod.label}
               >
-                <Plus className="w-4 h-4" /> New Inquiry
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <ModIcon className={`w-4 h-4 shrink-0 ${hasActiveSub ? 'text-blue-400' : 'text-slate-400'}`} />
+                  {(!sidebarCollapsed || isMobile) && <span className="truncate">{mod.label}</span>}
+                </div>
+                {(!sidebarCollapsed || isMobile) && (
+                  isExpanded ? <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                )}
               </button>
-            </div>
 
-            {inquiries.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center space-y-3">
-                <p className="text-sm text-slate-500">No active inquiries yet. Log your first client RFQ to start the Order-to-Cash cycle.</p>
-                <button
-                  onClick={() => setShowNewInqModal(true)}
-                  className="px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Plus className="w-4 h-4" /> Create First Inquiry
-                </button>
-              </div>
-            ) : (
-              <div className="grid gap-3">
-                {inquiries.map((inq) => {
-                  const fin = computeQuoteFinancials(inq, fxRates);
-                  return (
-                    <div
-                      key={inq.id}
-                      onClick={() => setSelectedInqId(inq.id)}
-                      className="bg-white border border-slate-200 hover:border-blue-400 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer"
-                    >
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded">{inq.refNo}</span>
-                          <span className="text-xs font-semibold bg-slate-100 px-2 py-0.5 rounded">{inq.division}</span>
-                          <span className="text-xs font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded">
-                            Sales: {inq.assignedSalesName} ({inq.commissionPct || 0}% Profit Share)
-                          </span>
+              {/* Collapsible Sub-Modules List */}
+              {isExpanded && (!sidebarCollapsed || isMobile) && (
+                <div className="ml-3 pl-2.5 border-l border-slate-800 space-y-0.5">
+                  {mod.subModules.map((sub) => {
+                    const SubIcon = sub.icon;
+                    const isActive = activeSubModule === sub.id;
+                    return (
+                      <button
+                        key={sub.id}
+                        onClick={() => selectSubModule(mod.id, sub.id)}
+                        className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
+                          isActive
+                            ? 'bg-blue-600 text-white shadow-sm'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <SubIcon className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">{sub.label}</span>
                         </div>
-                        <h3 className="text-base font-bold mt-1">{inq.clientName}</h3>
-                        <p className="text-xs text-slate-500">{inq.contactPerson} • {inq.phone}</p>
-                      </div>
-
-                      <div className="flex items-center justify-between sm:justify-end gap-4">
-                        <div className="text-right">
-                          <div className="text-xs text-slate-400">Quote Total (Incl. VAT)</div>
-                          <div className="text-base font-bold">SAR {formatSAR(fin.grandTotalSAR)}</div>
-                        </div>
-                        {inq.stage !== 'won' ? (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleConvertQuoteToSO(inq);
-                            }}
-                            className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold cursor-pointer"
-                          >
-                            Convert to SO →
-                          </button>
-                        ) : (
-                          <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-bold">
-                            SO Created
+                        {typeof sub.count === 'number' && (
+                          <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${isActive ? 'bg-blue-800 text-white' : 'bg-slate-800 text-slate-400'}`}>
+                            {sub.count}
                           </span>
                         )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </nav>
+
+      {/* Signed-in User Footer */}
+      <div className="p-3 border-t border-slate-800 flex items-center justify-between gap-2">
+        {(!sidebarCollapsed || isMobile) && (
+          <div className="min-w-0">
+            <div className="text-xs font-bold text-white truncate">{profile?.full_name}</div>
+            <div className="text-[10px] text-slate-400 truncate">{profile?.role_label}</div>
           </div>
         )}
+        <button
+          onClick={() => supabase.auth.signOut()}
+          className="p-2 rounded-xl bg-slate-800 hover:bg-rose-950 hover:text-rose-300 text-slate-400 cursor-pointer shrink-0"
+          title="Sign Out"
+        >
+          <LogOut className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
 
-        {activeModule === 'sales_orders' && (
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-base sm:text-lg font-bold text-slate-900">Sales Orders (SO) &amp; Delivery Execution</h2>
-              <p className="text-xs text-slate-500">Issue Full or Partial Delivery Notes against open Sales Orders, then generate ZATCA Invoices.</p>
-            </div>
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex">
+      {/* Desktop Fixed Left Sidebar */}
+      <aside className={`hidden lg:block shrink-0 border-r border-slate-800 transition-all duration-200 ${sidebarCollapsed ? 'w-16' : 'w-68'}`}>
+        <div className="sticky top-0 h-screen">{renderSidebarNav(false)}</div>
+      </aside>
 
-            {salesOrders.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-slate-500">
-                No Sales Orders yet. Convert an approved quote from <strong>1. Quotes &amp; CRM</strong> to create a Sales Order.
+      {/* Mobile Slide-Out Left Drawer */}
+      {mobileDrawerOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden flex">
+          <div className="w-72 max-w-[85vw] h-full shadow-2xl">{renderSidebarNav(true)}</div>
+          <div className="flex-1 bg-slate-950/60" onClick={() => setMobileDrawerOpen(false)} />
+        </div>
+      )}
+
+      {/* Main Content Workspace */}
+      <div className="flex-1 min-w-0 flex flex-col">
+        {/* Top Bar (Mobile Menu Button + Breadcrumb + VAT Info) */}
+        <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3 flex items-center justify-between gap-3 sticky top-0 z-20">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              onClick={() => setMobileDrawerOpen(true)}
+              className="lg:hidden p-2 rounded-xl bg-slate-100 text-slate-700"
+              aria-label="Open ERP Navigation"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-slate-900 truncate">{company.nameEn}</div>
+              <div className="text-[11px] text-slate-500 truncate">
+                VAT: {company.vatNumber} • CR: {company.crNumber}
               </div>
-            ) : (
-              <div className="grid gap-4">
-                {salesOrders.map((so) => (
-                  <div key={so.id} className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 space-y-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded">{so.so_number}</span>
-                          <span className="text-xs font-semibold uppercase px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
-                            {so.status.replace('_', ' ')}
-                          </span>
+            </div>
+          </div>
+
+          <div className="text-right">
+            <div className="text-[10px] uppercase font-semibold text-slate-400">YTD Taxable Sales</div>
+            <div className="text-xs sm:text-sm font-bold text-blue-700">SAR {formatSAR(annualTaxableRevenueSAR)}</div>
+          </div>
+        </header>
+
+        <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-5 space-y-5">
+          {/* ZATCA Revenue Wave Advisor Strip */}
+          <div className={`p-3 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs ${zatcaAdvice.badgeClass}`}>
+            <div className="flex items-start sm:items-center gap-2">
+              <QrCode className="w-4 h-4 shrink-0 mt-0.5 sm:mt-0" />
+              <div>
+                <span className="font-bold">{zatcaAdvice.wave}: </span>
+                <span>{zatcaAdvice.statusText}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* ================================================================ */}
+          {/* SUB-MODULE: 1.1 INQUIRIES & QUOTES                               */}
+          {/* ================================================================ */}
+          {activeSubModule === 'sales_quotes' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-base sm:text-lg font-bold text-slate-900">Inquiries &amp; Commercial Quotations</h2>
+                <button
+                  onClick={() => setShowNewInqModal(true)}
+                  className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" /> New Inquiry
+                </button>
+              </div>
+
+              {inquiries.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center space-y-3">
+                  <p className="text-sm text-slate-500">No active inquiries yet. Log your first client RFQ to start the Order-to-Cash cycle.</p>
+                  <button
+                    onClick={() => setShowNewInqModal(true)}
+                    className="px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" /> Create First Inquiry
+                  </button>
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  {inquiries.map((inq) => {
+                    const fin = computeQuoteFinancials(inq, fxRates);
+                    return (
+                      <div
+                        key={inq.id}
+                        onClick={() => setSelectedInqId(inq.id)}
+                        className="bg-white border border-slate-200 hover:border-blue-400 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer"
+                      >
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded">{inq.refNo}</span>
+                            <span className="text-xs font-semibold bg-slate-100 px-2 py-0.5 rounded">{inq.division}</span>
+                            <span className="text-xs font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded">
+                              Sales: {inq.assignedSalesName} ({inq.commissionPct || 0}% Share)
+                            </span>
+                          </div>
+                          <h3 className="text-base font-bold mt-1">{inq.clientName}</h3>
+                          <p className="text-xs text-slate-500">{inq.contactPerson} • {inq.phone}</p>
                         </div>
-                        <h3 className="text-base font-bold mt-1">{so.client_name}</h3>
-                        <p className="text-xs text-slate-500">
-                          Salesman: <strong>{so.salesman_name}</strong> • Total: <strong>SAR {formatSAR(so.grand_total_sar)}</strong>
-                        </p>
+
+                        <div className="flex items-center justify-between sm:justify-end gap-4">
+                          <div className="text-right">
+                            <div className="text-xs text-slate-400">Quote Total (Incl. VAT)</div>
+                            <div className="text-base font-bold">SAR {formatSAR(fin.grandTotalSAR)}</div>
+                          </div>
+                          {inq.stage !== 'won' ? (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleConvertQuoteToSO(inq);
+                              }}
+                              className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold cursor-pointer"
+                            >
+                              Convert to SO →
+                            </button>
+                          ) : (
+                            <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-bold">
+                              SO Created
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ================================================================ */}
+          {/* SUB-MODULE: 1.2 SALES ORDERS (SO)                                */}
+          {/* ================================================================ */}
+          {activeSubModule === 'sales_orders' && (
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-base sm:text-lg font-bold text-slate-900">Sales Orders (SO)</h2>
+                <p className="text-xs text-slate-500">Track line-item fulfillment and dispatch Full or Partial Deliveries.</p>
+              </div>
+
+              {salesOrders.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-slate-500">
+                  No Sales Orders yet. Convert an approved quote under <strong>Sales &amp; Fulfillment → Inquiries &amp; Quotes</strong>.
+                </div>
+              ) : (
+                <div className="grid gap-4">
+                  {salesOrders.map((so) => (
+                    <div key={so.id} className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded">{so.so_number}</span>
+                            <span className="text-xs font-semibold uppercase px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                              {so.status.replace('_', ' ')}
+                            </span>
+                          </div>
+                          <h3 className="text-base font-bold mt-1">{so.client_name}</h3>
+                          <p className="text-xs text-slate-500">
+                            Salesman: <strong>{so.salesman_name}</strong> • Total: <strong>SAR {formatSAR(so.grand_total_sar)}</strong>
+                          </p>
+                        </div>
+
+                        {so.status !== 'delivered' && (
+                          <button
+                            onClick={() => openDeliveryModal(so)}
+                            className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Truck className="w-4 h-4" /> Record Delivery (Full / Partial)
+                          </button>
+                        )}
                       </div>
 
-                      {so.status !== 'delivered' && (
-                        <button
-                          onClick={() => openDeliveryModal(so)}
-                          className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <Truck className="w-4 h-4" /> Record Delivery (Full / Partial)
-                        </button>
-                      )}
+                      <div className="border border-slate-100 rounded-xl overflow-hidden text-xs">
+                        <table className="w-full text-left">
+                          <thead className="bg-slate-50 text-slate-500">
+                            <tr>
+                              <th className="p-2">Item</th>
+                              <th className="p-2 text-right">Ordered</th>
+                              <th className="p-2 text-right">Delivered</th>
+                              <th className="p-2 text-right">Pending</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {(so.items || []).map((it) => {
+                              const pending = Math.max(0, Number(it.orderedQty) - Number(it.deliveredQty || 0));
+                              return (
+                                <tr key={it.id}>
+                                  <td className="p-2 font-medium">{it.desc}</td>
+                                  <td className="p-2 text-right">{it.orderedQty} {it.unit}</td>
+                                  <td className="p-2 text-right text-emerald-600 font-semibold">{it.deliveredQty || 0}</td>
+                                  <td className="p-2 text-right text-amber-600 font-semibold">{pending}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
-                    <div className="border border-slate-100 rounded-xl overflow-hidden text-xs">
-                      <table className="w-full text-left">
-                        <thead className="bg-slate-50 text-slate-500">
-                          <tr>
-                            <th className="p-2">Item</th>
-                            <th className="p-2 text-right">Ordered</th>
-                            <th className="p-2 text-right">Delivered</th>
-                            <th className="p-2 text-right">Pending</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {(so.items || []).map((it) => {
-                            const pending = Math.max(0, Number(it.orderedQty) - Number(it.deliveredQty || 0));
-                            return (
-                              <tr key={it.id}>
-                                <td className="p-2 font-medium">{it.desc}</td>
-                                <td className="p-2 text-right">{it.orderedQty} {it.unit}</td>
-                                <td className="p-2 text-right text-emerald-600 font-semibold">{it.deliveredQty || 0}</td>
-                                <td className="p-2 text-right text-amber-600 font-semibold">{pending}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                ))}
+          {/* ================================================================ */}
+          {/* SUB-MODULE: 1.3 DELIVERIES (FULL / PARTIAL)                      */}
+          {/* ================================================================ */}
+          {activeSubModule === 'sales_deliveries' && (
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-base sm:text-lg font-bold text-slate-900">Delivery Notes (Full &amp; Partial Dispatches)</h2>
+                <p className="text-xs text-slate-500">Issue ZATCA Tax Invoices directly against completed Delivery Notes.</p>
               </div>
-            )}
 
-            {deliveryNotes.length > 0 && (
-              <div className="space-y-3 pt-4 border-t border-slate-200">
-                <h3 className="text-sm font-bold text-slate-800">Issued Delivery Notes (DN)</h3>
+              {deliveryNotes.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-slate-500">
+                  No Delivery Notes recorded yet. Open <strong>Sales Orders (SO)</strong> and click <strong>Record Delivery</strong>.
+                </div>
+              ) : (
                 <div className="grid gap-3">
                   {deliveryNotes.map((dn) => {
                     const alreadyInvoiced = invoices.some((inv) => inv.dn_id === dn.id);
@@ -924,209 +1124,280 @@ export default function App() {
                     );
                   })}
                 </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeModule === 'invoices' && (
-          <div className="space-y-4">
-            <div>
-              <h2 className="text-base sm:text-lg font-bold text-slate-900">ZATCA Tax Invoices &amp; Customer Collections</h2>
-              <p className="text-xs text-slate-500">
-                Posted invoices are immutable per ZATCA regulations. Recording customer payments automatically unlocks Salesman Profit Share.
-              </p>
+              )}
             </div>
+          )}
 
-            {invoices.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-slate-500">
-                No ZATCA invoices issued yet. Record a Delivery Note in Module 2 and click <strong>Issue ZATCA Tax Invoice</strong>.
-              </div>
-            ) : (
-              <div className="grid gap-3">
-                {invoices.map((inv) => {
-                  const balanceDue = Math.max(0, Number(inv.grand_total_sar) - Number(inv.paid_amount_sar || 0));
-                  return (
-                    <div key={inv.id} className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded">{inv.invoice_number}</span>
-                          <span className="text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full">
-                            ZATCA {inv.zatca_status === 'cleared' ? 'Phase 2 Cleared' : 'Phase 1 TLV QR'}
-                          </span>
-                          <span className={`text-[11px] font-bold uppercase px-2 py-0.5 rounded-full ${
-                            inv.payment_status === 'paid'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : inv.payment_status === 'partial'
-                              ? 'bg-amber-100 text-amber-800'
-                              : 'bg-rose-100 text-rose-800'
-                          }`}>
-                            {inv.payment_status}
-                          </span>
-                        </div>
-                        <h3 className="text-base font-bold mt-1">{inv.client_name}</h3>
-                        <p className="text-xs text-slate-500">
-                          Salesman: <strong>{inv.salesman_name}</strong> • Total: <strong>SAR {formatSAR(inv.grand_total_sar)}</strong> • Paid: <strong>SAR {formatSAR(inv.paid_amount_sar)}</strong>
-                        </p>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          onClick={() => setPreviewInvoice(inv)}
-                          className="px-3 py-2 rounded-xl border border-slate-300 hover:bg-slate-50 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <QrCode className="w-4 h-4" /> View ZATCA Invoice
-                        </button>
-                        {balanceDue > 0.01 && (
-                          <button
-                            onClick={() => {
-                              setPaymentModalInv(inv);
-                              setPaymentAmount(balanceDue.toFixed(2));
-                            }}
-                            className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold cursor-pointer"
-                          >
-                            + Receive Payment (SAR {formatSAR(balanceDue)})
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeModule === 'purchase' && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
+          {/* ================================================================ */}
+          {/* SUB-MODULE: 1.4 ZATCA INVOICES                                   */}
+          {/* ================================================================ */}
+          {activeSubModule === 'sales_invoices' && (
+            <div className="space-y-4">
               <div>
-                <h2 className="text-base sm:text-lg font-bold text-slate-900">Purchase Full Cycle &amp; Landed Costing</h2>
-                <p className="text-xs text-slate-500">PO Issuance → Goods Receipt Note (GRN) → Supplier Bill &amp; Customs/Freight Allocation.</p>
+                <h2 className="text-base sm:text-lg font-bold text-slate-900">ZATCA E-Invoices (Phase 1 TLV QR &amp; Phase 2 Ready)</h2>
+                <p className="text-xs text-slate-500">Posted invoices are locked against deletion/modification per ZATCA regulations.</p>
               </div>
-              <button
-                onClick={() => setShowNewPOModal(true)}
-                className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
-              >
-                <Plus className="w-4 h-4" /> New Purchase Order
-              </button>
-            </div>
 
-            {purchaseOrders.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-slate-500">
-                No Purchase Orders created yet. Click <strong>New Purchase Order</strong> to issue a supplier PO.
-              </div>
-            ) : (
-              <div className="grid gap-3">
-                {purchaseOrders.map((po) => {
-                  const totalLandedSar = Number(po.goods_total_sar || 0) + Number(po.landed_cost_sar || 0);
-                  return (
-                    <div key={po.id} className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div>
+              {invoices.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-slate-500">
+                  No ZATCA invoices issued yet.
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  {invoices.map((inv) => {
+                    const balanceDue = Math.max(0, Number(inv.grand_total_sar) - Number(inv.paid_amount_sar || 0));
+                    return (
+                      <div key={inv.id} className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded">{inv.invoice_number}</span>
+                            <span className="text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full">
+                              ZATCA {inv.zatca_status === 'cleared' ? 'Phase 2 Cleared' : 'Phase 1 TLV QR'}
+                            </span>
+                            <span className={`text-[11px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                              inv.payment_status === 'paid'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : inv.payment_status === 'partial'
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-rose-100 text-rose-800'
+                            }`}>
+                              {inv.payment_status}
+                            </span>
+                          </div>
+                          <h3 className="text-base font-bold mt-1">{inv.client_name}</h3>
+                          <p className="text-xs text-slate-500">
+                            Salesman: <strong>{inv.salesman_name}</strong> • Total: <strong>SAR {formatSAR(inv.grand_total_sar)}</strong> • Paid: <strong>SAR {formatSAR(inv.paid_amount_sar)}</strong>
+                          </p>
+                        </div>
+
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded">{po.po_number}</span>
-                          {po.so_number && <span className="text-xs bg-slate-100 px-2 py-0.5 rounded">Linked: {po.so_number}</span>}
-                          <span className="text-xs font-bold uppercase text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
-                            {po.status.replace('_', ' ')}
+                          <button
+                            onClick={() => setPreviewInvoice(inv)}
+                            className="px-3 py-2 rounded-xl border border-slate-300 hover:bg-slate-50 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <QrCode className="w-4 h-4" /> View ZATCA Invoice
+                          </button>
+                          {balanceDue > 0.01 && (
+                            <button
+                              onClick={() => {
+                                setPaymentModalInv(inv);
+                                setPaymentAmount(balanceDue.toFixed(2));
+                              }}
+                              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold cursor-pointer"
+                            >
+                              + Receive Payment (SAR {formatSAR(balanceDue)})
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ================================================================ */}
+          {/* SUB-MODULE: 2.1 AR CUSTOMER RECEIPTS                             */}
+          {/* ================================================================ */}
+          {activeSubModule === 'fin_collections' && (
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-base sm:text-lg font-bold text-slate-900">Accounts Receivable &amp; Customer Receipts</h2>
+                <p className="text-xs text-slate-500">Collected customer payments unlock Salesman Net Profit Share automatically.</p>
+              </div>
+
+              {receipts.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-slate-500">
+                  No customer payments recorded yet. Open <strong>ZATCA Invoices</strong> and click <strong>+ Receive Payment</strong>.
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  {receipts.map((r) => (
+                    <div key={r.id} className="bg-white border border-slate-200 rounded-2xl p-4 flex items-center justify-between">
+                      <div>
+                        <div className="text-xs font-bold text-emerald-700">{r.receipt_number} • Invoice {r.invoice_number}</div>
+                        <div className="font-bold text-sm mt-0.5">{r.client_name}</div>
+                        <div className="text-xs text-slate-500">{r.payment_method} {r.reference_no ? `• Ref: ${r.reference_no}` : ''}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-base font-bold text-emerald-600">+ SAR {formatSAR(r.amount_sar)}</div>
+                        <div className="text-[11px] text-slate-400">{new Date(r.received_at).toLocaleDateString()}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ================================================================ */}
+          {/* SUB-MODULE: 2.2 ZATCA WAVE & VAT SUMMARY                         */}
+          {/* ================================================================ */}
+          {activeSubModule === 'fin_zatca_advisor' && (
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
+              <h2 className="text-base font-bold text-slate-900">ZATCA Fatoora Wave Readiness &amp; VAT Output Summary</h2>
+              <div className="grid sm:grid-cols-3 gap-4 text-xs">
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
+                  <div className="text-slate-500">YTD Taxable Sales (Excl. VAT)</div>
+                  <div className="text-xl font-bold mt-1">SAR {formatSAR(annualTaxableRevenueSAR)}</div>
+                </div>
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
+                  <div className="text-slate-500">Output VAT Collected (15%)</div>
+                  <div className="text-xl font-bold text-blue-700 mt-1">
+                    SAR {formatSAR(invoices.reduce((s, i) => s + Number(i.vat_sar || 0), 0))}
+                  </div>
+                </div>
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
+                  <div className="text-slate-500">Applicable ZATCA Phase</div>
+                  <div className="text-sm font-bold text-emerald-700 mt-1">{zatcaAdvice.wave}</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ================================================================ */}
+          {/* SUB-MODULES: 3.1 / 3.2 / 3.3 PURCHASE CYCLE                      */}
+          {/* ================================================================ */}
+          {['pur_orders', 'pur_grn', 'pur_bills'].includes(activeSubModule) && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-base sm:text-lg font-bold text-slate-900">
+                    {activeSubModule === 'pur_orders' && 'Purchase Orders (PO)'}
+                    {activeSubModule === 'pur_grn' && 'Goods Receipt Notes (GRN)'}
+                    {activeSubModule === 'pur_bills' && 'Supplier Bills & Landed Cost'}
+                  </h2>
+                  <p className="text-xs text-slate-500">PO Issuance → Goods Receipt Note (GRN) → Supplier Bill &amp; Customs/Freight Allocation.</p>
+                </div>
+                <button
+                  onClick={() => setShowNewPOModal(true)}
+                  className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" /> New Purchase Order
+                </button>
+              </div>
+
+              {purchaseOrders.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-slate-500">
+                  No Purchase Orders created yet. Click <strong>New Purchase Order</strong> to issue a supplier PO.
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  {purchaseOrders.map((po) => {
+                    const totalLandedSar = Number(po.goods_total_sar || 0) + Number(po.landed_cost_sar || 0);
+                    return (
+                      <div key={po.id} className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded">{po.po_number}</span>
+                            {po.so_number && <span className="text-xs bg-slate-100 px-2 py-0.5 rounded">Linked: {po.so_number}</span>}
+                            <span className="text-xs font-bold uppercase text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
+                              {po.status.replace('_', ' ')}
+                            </span>
+                          </div>
+                          <h3 className="text-base font-bold mt-1">{po.supplier_name}</h3>
+                          <p className="text-xs text-slate-500">
+                            Goods: <strong>{po.currency} {formatSAR(po.goods_total_fx)}</strong> (SAR {formatSAR(po.goods_total_sar)}) + Freight/Customs: <strong>SAR {formatSAR(po.landed_cost_sar)}</strong> = Total Landed: <strong>SAR {formatSAR(totalLandedSar)}</strong>
+                          </p>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          {po.status === 'po_issued' && (
+                            <button
+                              onClick={() => advancePurchaseStage(po, 'grn_completed', {}, 'pur_grn')}
+                              className="px-3 py-2 rounded-xl bg-indigo-600 text-white text-xs font-semibold cursor-pointer"
+                            >
+                              Record GRN (Goods Received)
+                            </button>
+                          )}
+                          {po.status === 'grn_completed' && (
+                            <button
+                              onClick={() => advancePurchaseStage(po, 'billed', { bill_status: 'posted' }, 'pur_bills')}
+                              className="px-3 py-2 rounded-xl bg-purple-600 text-white text-xs font-semibold cursor-pointer"
+                            >
+                              Post Supplier Bill to Finance
+                            </button>
+                          )}
+                          {po.status === 'billed' && po.bill_status !== 'paid' && (
+                            <button
+                              onClick={() => advancePurchaseStage(po, 'billed', { bill_status: 'paid', paid_sar: totalLandedSar + Number(po.supplier_vat_sar || 0) })}
+                              className="px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-semibold cursor-pointer"
+                            >
+                              Mark Supplier Paid
+                            </button>
+                          )}
+                          {po.bill_status === 'paid' && (
+                            <span className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 text-xs font-bold">
+                              ✓ GRN &amp; Supplier Paid
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ================================================================ */}
+          {/* SUB-MODULE: 4.1 COLLECTION-BASED SALES PROFIT SHARE LEDGER       */}
+          {/* ================================================================ */}
+          {activeSubModule === 'comm_ledger' && (
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-base sm:text-lg font-bold text-slate-900">Sales Profit Share Ledger (Collection-Based)</h2>
+                <p className="text-xs text-slate-500">
+                  Calculated strictly on <strong>Net Profit</strong> and unlocked proportionally as <strong>Customer Payments</strong> are collected.
+                </p>
+              </div>
+
+              {commissions.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-slate-500">
+                  No profit-share entries yet. Assign a salesman with a Commission % and issue an invoice to track profit share.
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  {commissions.map((c) => (
+                    <div key={c.id} className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-purple-700 bg-purple-50 px-2.5 py-0.5 rounded">{c.salesman_name}</span>
+                          <span className="text-xs font-semibold bg-slate-100 px-2 py-0.5 rounded">Rate: {c.commission_pct}% of Net Profit</span>
+                          <span className={`text-[11px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                            c.status === 'ready_for_payout'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : c.status === 'partially_unlocked'
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-slate-200 text-slate-700'
+                          }`}>
+                            {c.status.replace('_', ' ')}
                           </span>
                         </div>
-                        <h3 className="text-base font-bold mt-1">{po.supplier_name}</h3>
+                        <h3 className="text-base font-bold mt-1">{c.client_name} ({c.invoice_number})</h3>
                         <p className="text-xs text-slate-500">
-                          Goods: <strong>{po.currency} {formatSAR(po.goods_total_fx)}</strong> (SAR {formatSAR(po.goods_total_sar)}) + Freight/Customs: <strong>SAR {formatSAR(po.landed_cost_sar)}</strong> = Total Landed: <strong>SAR {formatSAR(totalLandedSar)}</strong>
+                          Deal Net Profit: <strong>SAR {formatSAR(c.net_profit_sar)}</strong> • Total Eligible Share: <strong>SAR {formatSAR(c.total_eligible_commission_sar)}</strong>
                         </p>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-2">
-                        {po.status === 'po_issued' && (
-                          <button
-                            onClick={() => advancePurchaseStage(po, 'grn_completed')}
-                            className="px-3 py-2 rounded-xl bg-indigo-600 text-white text-xs font-semibold cursor-pointer"
-                          >
-                            Record GRN (Goods Received)
-                          </button>
-                        )}
-                        {po.status === 'grn_completed' && (
-                          <button
-                            onClick={() => advancePurchaseStage(po, 'billed', { bill_status: 'posted' })}
-                            className="px-3 py-2 rounded-xl bg-purple-600 text-white text-xs font-semibold cursor-pointer"
-                          >
-                            Post Supplier Bill to Finance
-                          </button>
-                        )}
-                        {po.status === 'billed' && po.bill_status !== 'paid' && (
-                          <button
-                            onClick={() => advancePurchaseStage(po, 'billed', { bill_status: 'paid', paid_sar: totalLandedSar + Number(po.supplier_vat_sar || 0) })}
-                            className="px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-semibold cursor-pointer"
-                          >
-                            Mark Supplier Paid
-                          </button>
-                        )}
-                        {po.bill_status === 'paid' && (
-                          <span className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 text-xs font-bold">
-                            ✓ GRN &amp; Supplier Paid
-                          </span>
-                        )}
+                      <div className="text-left sm:text-right bg-slate-50 p-3 rounded-xl border border-slate-200">
+                        <div className="text-[11px] text-slate-500">Unlocked (Collected Cash Basis)</div>
+                        <div className="text-lg font-bold text-emerald-600">SAR {formatSAR(c.unlocked_commission_sar)}</div>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeModule === 'profit_share' && (
-          <div className="space-y-4">
-            <div>
-              <h2 className="text-base sm:text-lg font-bold text-slate-900">Sales Profit Share Ledger (Collection-Based)</h2>
-              <p className="text-xs text-slate-500">
-                Calculated strictly on <strong>Net Profit</strong> and unlocked proportionally as <strong>Customer Payments</strong> are collected.
-              </p>
+                  ))}
+                </div>
+              )}
             </div>
+          )}
 
-            {commissions.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-slate-500">
-                No profit-share entries yet. Assign a salesman with a Commission % and issue an invoice to track profit share.
-              </div>
-            ) : (
-              <div className="grid gap-3">
-                {commissions.map((c) => (
-                  <div key={c.id} className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-purple-700 bg-purple-50 px-2.5 py-0.5 rounded">{c.salesman_name}</span>
-                        <span className="text-xs font-semibold bg-slate-100 px-2 py-0.5 rounded">Rate: {c.commission_pct}% of Net Profit</span>
-                        <span className={`text-[11px] font-bold uppercase px-2 py-0.5 rounded-full ${
-                          c.status === 'ready_for_payout'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : c.status === 'partially_unlocked'
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-slate-200 text-slate-700'
-                        }`}>
-                          {c.status.replace('_', ' ')}
-                        </span>
-                      </div>
-                      <h3 className="text-base font-bold mt-1">{c.client_name} ({c.invoice_number})</h3>
-                      <p className="text-xs text-slate-500">
-                        Deal Net Profit: <strong>SAR {formatSAR(c.net_profit_sar)}</strong> • Total Eligible Share: <strong>SAR {formatSAR(c.total_eligible_commission_sar)}</strong>
-                      </p>
-                    </div>
-
-                    <div className="text-left sm:text-right bg-slate-50 p-3 rounded-xl border border-slate-200">
-                      <div className="text-[11px] text-slate-500">Unlocked (Collected Cash Basis)</div>
-                      <div className="text-lg font-bold text-emerald-600">SAR {formatSAR(c.unlocked_commission_sar)}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeModule === 'settings' && (
-          <div className="grid lg:grid-cols-2 gap-6">
-            <form onSubmit={handleSaveCompanySettings} className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          {/* ================================================================ */}
+          {/* SUB-MODULE: 5.1 EDITABLE COMPANY & ZATCA PROFILE                 */}
+          {/* ================================================================ */}
+          {activeSubModule === 'set_company' && (
+            <form onSubmit={handleSaveCompanySettings} className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 max-w-2xl">
+              <div className="border-b border-slate-100 pb-3">
                 <h2 className="text-base font-bold text-slate-900">Company &amp; ZATCA Tax Profile (Editable)</h2>
               </div>
 
@@ -1215,8 +1486,13 @@ export default function App() {
                 Save Company Settings
               </button>
             </form>
+          )}
 
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
+          {/* ================================================================ */}
+          {/* SUB-MODULE: 5.2 SALESMAN PROFIT SHARE % CONFIGURATION            */}
+          {/* ================================================================ */}
+          {activeSubModule === 'set_salesmen' && (
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 max-w-2xl">
               <div className="border-b border-slate-100 pb-3">
                 <h2 className="text-base font-bold text-slate-900">Team Roles &amp; Salesman Profit Share (%)</h2>
                 <p className="text-xs text-slate-500">
@@ -1259,13 +1535,13 @@ export default function App() {
                 ))}
               </div>
             </div>
-          </div>
-        )}
-      </main>
+          )}
+        </main>
+      </div>
 
       {/* INQUIRY BOQ & MULTI-CURRENCY COSTING DRAWER */}
       {selectedInq && (
-        <div className="fixed inset-0 bg-slate-950/70 z-40 flex justify-end">
+        <div className="fixed inset-0 bg-slate-950/70 z-50 flex justify-end">
           <div className="bg-white w-full max-w-3xl h-full overflow-y-auto p-5 sm:p-6 space-y-5 shadow-2xl">
             <div className="flex items-start justify-between border-b pb-3">
               <div>
