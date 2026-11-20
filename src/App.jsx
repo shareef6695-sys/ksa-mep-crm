@@ -1,146 +1,48 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import {
-  Search, Plus, Phone, Mail, MessageSquare, CheckCircle2,
-  AlertTriangle, Building2, ShieldCheck,
-  ChevronRight, X, Send, Lock, Eye, EyeOff,
-  LogOut, RefreshCw, ArrowRight, Layers, Globe,
-  LayoutList, UserCheck, ChevronDown, ChevronUp, Trash2
+  Plus, Phone, MessageSquare, CheckCircle2,
+  AlertTriangle, Building2, ShieldCheck, X,
+  Lock, Eye, EyeOff, LogOut, RefreshCw, ArrowRight, Layers, Globe,
+  Trash2, Truck, Receipt, ShoppingBag, Percent, Settings, Printer, QrCode
 } from 'lucide-react';
+import { generateZatcaQrBase64, getZatcaComplianceAdvice, formatSAR } from './erp/erpEngine';
 
-// ============================================================================
-// SUPABASE CLIENT CONFIGURATION
-// ============================================================================
 const SUPABASE_URL = 'https://jknuhynysewoizjxbidw.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImprbnVoeW55c2V3b2l6anhiaWR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUxODgwMDMsImV4cCI6MjExMDc2NDAwM30.cM0tm_pnvgIN40MYrIB92RR4g4bLvFQx415hvOWuLsU';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// ============================================================================
-// CONSTANTS & PIPELINE STAGES
-// ============================================================================
-const STAGES = [
-  { id: 'new_inquiry', label: '1. New Inquiry', short: 'New', owner: 'Salesman', badge: 'bg-slate-100 text-slate-700 border-slate-300' },
-  { id: 'rfq_suppliers', label: '2. Supplier RFQ', short: 'RFQ', owner: 'Purchase', badge: 'bg-amber-50 text-amber-800 border-amber-300' },
-  { id: 'manager_approval', label: '3. Manager Approval', short: 'Approval', owner: 'Manager', badge: 'bg-purple-50 text-purple-800 border-purple-300' },
-  { id: 'quoted', label: '4. Quoted (SAR)', short: 'Quoted', owner: 'Sales / Coord', badge: 'bg-blue-50 text-blue-800 border-blue-300' },
-  { id: 'follow_up', label: '5. Active Follow-Up', short: 'Follow-Up', owner: 'Coordinator', badge: 'bg-indigo-50 text-indigo-800 border-indigo-300' },
-  { id: 'won', label: '6. Won / PO Received', short: 'Won', owner: 'All Team', badge: 'bg-emerald-50 text-emerald-800 border-emerald-300' },
-  { id: 'lost', label: '7. Closed / Lost', short: 'Lost', owner: 'All Team', badge: 'bg-rose-50 text-rose-800 border-rose-300' },
-];
-
-const ROLES = [
-  { key: 'all', label: 'All Pipeline', short: 'All' },
-  { key: 'sales_mep', label: 'Salesman 1 (MEP)', short: 'MEP' },
-  { key: 'sales_it', label: 'Salesman 2 (IT)', short: 'IT/ELV' },
-  { key: 'purchase', label: 'Purchase Officer', short: 'Purchase' },
-  { key: 'coordinator', label: 'Sales Coordinator', short: 'Coord' },
-  { key: 'manager', label: 'Sales Manager', short: 'Manager' },
-];
-
 const CURRENCIES = ['SAR', 'USD', 'EUR', 'GBP', 'AED'];
 const DEFAULT_FX = { SAR: 1, USD: 3.75, EUR: 4.08, GBP: 4.78, AED: 1.021 };
 
-const SEED_INQUIRIES = [
-  {
-    id: 'INQ-2026-101',
-    refNo: 'HBS-MEP-26-101',
-    clientName: 'Al-Riyadh Modern Contracting Co.',
-    contactPerson: 'Eng. Abdullah Al-Mansour',
-    phone: '+966 50 441 8820',
-    email: 'a.mansour@rmc-ksa.com',
-    division: 'MEP',
-    assignedSalesKey: 'sales_mep',
-    assignedSalesName: 'Tariq Al-Harbi',
-    stage: 'manager_approval',
-    marginPercent: 18,
-    managerApproved: false,
-    approvedBy: '',
-    approvedAt: '',
-    createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-    lastFollowUpAt: new Date(Date.now() - 86400000).toISOString(),
-    boqItems: [
-      { id: 'b1', desc: 'Chilled Water Centrifugal Pump 45kW (Grundfos/eq)', qty: 2, unit: 'Nos', buyCurrency: 'EUR', buyUnitCost: 4200, supplier: 'EuroFlow GmbH' },
-      { id: 'b2', desc: 'Motorized Butterfly Valve DN150 PN16', qty: 6, unit: 'Nos', buyCurrency: 'USD', buyUnitCost: 340, supplier: 'Gulf Valve Trading' },
-    ],
-    vendorQuotes: [
-      { id: 'v1', supplier: 'EuroFlow GmbH', currency: 'EUR', amount: 8400, leadTime: '3 Weeks Ex-Works', selected: true },
-      { id: 'v2', supplier: 'Riyadh Pumps Est.', currency: 'SAR', amount: 36500, leadTime: '4 Weeks DDP', selected: false },
-    ],
-    followUps: [
-      { id: 'f1', channel: 'Email', note: 'BOQ received and forwarded to Purchase for European pump sizing.', by: 'Tariq Al-Harbi', at: new Date(Date.now() - 86400000 * 2).toISOString() },
-      { id: 'f2', channel: 'WhatsApp', note: 'Supplier pricing updated in EUR & USD. Submitted for Sales Manager approval.', by: 'Khalid Al-Qahtani', at: new Date(Date.now() - 3600000 * 6).toISOString() },
-    ],
-  },
-  {
-    id: 'INQ-2026-102',
-    refNo: 'HBS-IT-26-102',
-    clientName: 'Red Sea Logistics & Warehousing',
-    contactPerson: 'Mr. Majed Al-Shehri',
-    phone: '+966 55 912 3304',
-    email: 'm.shehri@redsealogistics.sa',
-    division: 'IT & ELV',
-    assignedSalesKey: 'sales_it',
-    assignedSalesName: 'Faisal Al-Otaibi',
-    stage: 'follow_up',
-    marginPercent: 22,
-    managerApproved: true,
-    approvedBy: 'Omar Al-Ghamdi',
-    approvedAt: new Date(Date.now() - 86400000 * 3).toISOString(),
-    createdAt: new Date(Date.now() - 86400000 * 5).toISOString(),
-    lastFollowUpAt: new Date(Date.now() - 3600000 * 54).toISOString(),
-    boqItems: [
-      { id: 'b3', desc: '48-Port PoE+ Layer 3 Core Switch + Dual PSU', qty: 4, unit: 'Nos', buyCurrency: 'USD', buyUnitCost: 1850, supplier: 'TechDisti Middle East' },
-      { id: 'b4', desc: '4MP Outdoor Bullet IP Camera IP67 + Pole Mount', qty: 24, unit: 'Nos', buyCurrency: 'USD', buyUnitCost: 145, supplier: 'SecureVision Dubai' },
-      { id: 'b5', desc: 'Installation, Fiber Splicing & Commissioning', qty: 1, unit: 'Lot', buyCurrency: 'SAR', buyUnitCost: 8500, supplier: 'In-House IT Team' },
-    ],
-    vendorQuotes: [
-      { id: 'v3', supplier: 'TechDisti Middle East', currency: 'USD', amount: 7400, leadTime: '5 Days Jebel Ali', selected: true },
-    ],
-    followUps: [
-      { id: 'f3', channel: 'Email', note: 'Official SAR Quotation (incl. 15% VAT) sent to client procurement.', by: 'Sara Al-Zahrani', at: new Date(Date.now() - 86400000 * 3).toISOString() },
-      { id: 'f4', channel: 'Phone', note: 'Spoke with Mr. Majed; technical submittals under IT Manager review.', by: 'Sara Al-Zahrani', at: new Date(Date.now() - 3600000 * 54).toISOString() },
-    ],
-  },
-];
-
-// ============================================================================
-// HELPER FUNCTIONS
-// ============================================================================
-const formatSAR = (num) =>
-  new Intl.NumberFormat('en-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num || 0);
-
-const formatCompactSAR = (num) => {
-  if (num >= 1000000) return `${(num / 1000000).toFixed(2)}M`;
-  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
-  return formatSAR(num);
+const DEFAULT_COMPANY = {
+  nameEn: 'Horizon Business Solutions Est.',
+  nameAr: 'مؤسسة حلول الأفق للأعمال',
+  vatNumber: '300000000000003',
+  crNumber: '4030000000',
+  city: 'Jeddah',
+  addressEn: 'Jeddah, Kingdom of Saudi Arabia',
+  addressAr: 'جدة، المملكة العربية السعودية',
+  phone: '+966 12 000 0000',
+  email: 'info@horizon-ksa.com',
+  zatcaPhase2Connected: false,
 };
 
-const computeFinancials = (inquiry, fxRates) => {
+const computeQuoteFinancials = (inquiry, fxRates) => {
   const totalCostSAR = (inquiry.boqItems || []).reduce((sum, item) => {
     const rate = fxRates[item.buyCurrency] || 1;
     return sum + (Number(item.qty) || 0) * (Number(item.buyUnitCost) || 0) * rate;
   }, 0);
-
   const margin = Number(inquiry.marginPercent) || 0;
   const sellNetSAR = margin >= 100 ? totalCostSAR : totalCostSAR / (1 - margin / 100);
   const profitSAR = sellNetSAR - totalCostSAR;
   const vatSAR = sellNetSAR * 0.15;
   const grandTotalSAR = sellNetSAR + vatSAR;
-
   return { totalCostSAR, sellNetSAR, profitSAR, vatSAR, grandTotalSAR };
 };
 
-const isFollowUpOverdue = (inquiry) => {
-  if (!['quoted', 'follow_up'].includes(inquiry.stage)) return false;
-  const last = new Date(inquiry.lastFollowUpAt || inquiry.createdAt).getTime();
-  return Date.now() - last > 48 * 3600 * 1000;
-};
-
-// ============================================================================
-// LOGIN LANDING PAGE COMPONENT (MOBILE + DESKTOP RESPONSIVE)
-// ============================================================================
-function LoginLandingPage({ onLoginSuccess }) {
+function LoginLandingPage({ company, onLoginSuccess }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -151,18 +53,13 @@ function LoginLandingPage({ onLoginSuccess }) {
     e.preventDefault();
     setErrorMsg('');
     setLoading(true);
-
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
       });
-
-      if (error) {
-        setErrorMsg(error.message || 'Invalid login credentials. Please contact your Sales Manager.');
-      } else if (data?.user) {
-        onLoginSuccess(data.user);
-      }
+      if (error) setErrorMsg(error.message || 'Invalid credentials.');
+      else if (data?.user) onLoginSuccess(data.user);
     } catch {
       setErrorMsg('Unable to connect to authentication server.');
     } finally {
@@ -172,1406 +69,1673 @@ function LoginLandingPage({ onLoginSuccess }) {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col lg:flex-row">
-      {/* Top Brand Header on Mobile / Left Showcase on Desktop */}
       <div className="lg:w-7/12 p-6 sm:p-10 lg:p-16 flex flex-col justify-between bg-gradient-to-br from-slate-900 via-slate-900 to-blue-950 border-b lg:border-b-0 lg:border-r border-slate-800">
         <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-400/20 text-blue-300 text-[11px] font-semibold tracking-wide uppercase mb-4 sm:mb-8">
-            <Building2 className="w-3.5 h-3.5" />
-            KSA ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Internal Operations Portal
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-400/20 text-blue-300 text-[11px] font-semibold uppercase mb-4 sm:mb-8">
+            <Building2 className="w-3.5 h-3.5" /> KSA Enterprise Resource Planning (ERP)
           </div>
-
-          <h1 className="text-2xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-white leading-tight">
-            Horizon Business Solutions Est.
+          <h1 className="text-2xl sm:text-4xl lg:text-5xl font-bold text-white leading-tight">
+            {company.nameEn}
           </h1>
-          <p className="mt-2.5 sm:mt-4 text-sm sm:text-lg text-slate-300 max-w-xl leading-relaxed">
-            Sales, Multi-Currency Procurement &amp; Follow-Up Workspace for{' '}
-            <span className="text-white font-semibold">MEP</span> and{' '}
-            <span className="text-white font-semibold">IT / ELV</span> Trading.
+          <p className="text-base sm:text-xl text-blue-300 font-semibold mt-1">{company.nameAr}</p>
+          <p className="mt-3 text-sm sm:text-base text-slate-300 max-w-xl leading-relaxed">
+            Integrated Sales Orders, Partial/Full Deliveries, ZATCA E-Invoicing, Multi-Currency Purchase Cycle &amp; Collection-Based Profit Share.
           </p>
-
-          {/* Feature Grid (Hidden on very small screens to keep login form above the fold) */}
-          <div className="hidden sm:grid sm:grid-cols-2 gap-4 max-w-2xl mt-8">
-            <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
-              <div className="flex items-center gap-2 text-blue-400 font-semibold text-sm mb-1">
-                <Globe className="w-4 h-4" /> Multi-Currency RFQ ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ SAR
-              </div>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Source vendor pricing in USD, EUR, GBP, AED, or SAR and calculate 15% KSA VAT quotes.
-              </p>
-            </div>
-            <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
-              <div className="flex items-center gap-2 text-purple-400 font-semibold text-sm mb-1">
-                <ShieldCheck className="w-4 h-4" /> Sales Manager Sign-Off
-              </div>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Built-in verbal and system approval checkpoint before releasing final client quotes.
-              </p>
-            </div>
-            <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
-              <div className="flex items-center gap-2 text-emerald-400 font-semibold text-sm mb-1">
-                <Phone className="w-4 h-4" /> Coordinator Follow-Up Hub
-              </div>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                One-tap call, email, and WhatsApp Business follow-ups with 48-hour SLA alerts.
-              </p>
-            </div>
-            <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
-              <div className="flex items-center gap-2 text-amber-400 font-semibold text-sm mb-1">
-                <Layers className="w-4 h-4" /> Live Mobile &amp; Desktop Sync
-              </div>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Instant updates across all 5 team roles in the office or on client sites.
-              </p>
-            </div>
-          </div>
         </div>
-
         <div className="hidden lg:flex mt-12 pt-6 border-t border-slate-800/80 items-center justify-between text-xs text-slate-500">
-          <span>Ãƒâ€šÃ‚Â© {new Date().getFullYear()} Horizon Business Solutions Est.</span>
-          <span>Secured by Supabase</span>
+          <span>© {new Date().getFullYear()} {company.nameEn}</span>
+          <span>VAT: {company.vatNumber} • CR: {company.crNumber}</span>
         </div>
       </div>
 
-      {/* Sign-In Form */}
       <div className="flex-1 lg:w-5/12 p-5 sm:p-10 lg:p-16 flex items-center justify-center bg-slate-950">
-        <div className="w-full max-w-md">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl">
-            <div className="w-11 h-11 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 mb-4">
-              <Lock className="w-5 h-5" />
-            </div>
-
-            <h2 className="text-xl sm:text-2xl font-bold text-white">Team Member Sign In</h2>
-            <p className="text-xs sm:text-sm text-slate-400 mt-1">
-              Sign in with your Horizon corporate email and password.
-            </p>
-
-            {errorMsg && (
-              <div className="mt-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
-                <span>{errorMsg}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleSignIn} className="mt-5 space-y-4">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-                  Work Email Address
-                </label>
-                <div className="relative">
-                  <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-3.5" />
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="name@horizon-ksa.com"
-                    className="w-full pl-10 pr-4 py-3 bg-slate-950 border border-slate-700 rounded-xl text-base sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-                  Password
-                </label>
-                <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-3.5" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢"
-                    className="w-full pl-10 pr-12 py-3 bg-slate-950 border border-slate-700 rounded-xl text-base sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-200 p-1"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 active:bg-blue-700 disabled:opacity-60 text-white font-semibold text-sm flex items-center justify-center gap-2 transition shadow-lg shadow-blue-600/20 cursor-pointer"
-              >
-                {loading ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" /> Authenticating...
-                  </>
-                ) : (
-                  <>
-                    Sign In to Workspace <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-            </form>
+        <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl">
+          <div className="w-11 h-11 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 mb-4">
+            <Lock className="w-5 h-5" />
           </div>
+          <h2 className="text-xl sm:text-2xl font-bold text-white">ERP Staff Sign In</h2>
+          <p className="text-xs sm:text-sm text-slate-400 mt-1">Sign in with your corporate credentials.</p>
+
+          {errorMsg && (
+            <div className="mt-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSignIn} className="mt-5 space-y-4">
+            <div>
+              <label className="block text-xs font-semibold uppercase text-slate-400 mb-1.5">Work Email</label>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="name@horizon-ksa.com"
+                className="w-full px-3.5 py-3 bg-slate-950 border border-slate-700 rounded-xl text-base sm:text-sm text-white focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase text-slate-400 mb-1.5">Password</label>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full pl-3.5 pr-12 py-3 bg-slate-950 border border-slate-700 rounded-xl text-base sm:text-sm text-white focus:outline-none focus:border-blue-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-2.5 text-slate-400 p-1"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm flex items-center justify-center gap-2 cursor-pointer"
+            >
+              {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <>Sign In to ERP <ArrowRight className="w-4 h-4" /></>}
+            </button>
+          </form>
         </div>
       </div>
     </div>
   );
 }
 
-// ============================================================================
-// MAIN CRM APPLICATION (MOBILE-FIRST + DESKTOP)
-// ============================================================================
 export default function App() {
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [profile, setProfile] = useState(null);
-
-  // CRM State
-  const [inquiries, setInquiries] = useState([]);
+  const [teamProfiles, setTeamProfiles] = useState([]);
+  const [company, setCompany] = useState(DEFAULT_COMPANY);
   const [fxRates, setFxRates] = useState(DEFAULT_FX);
   const [syncStatus, setSyncStatus] = useState('connecting');
-  const [activeRoleFilter, setActiveRoleFilter] = useState('all');
-  const [stageFilter, setStageFilter] = useState('all');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedId, setSelectedId] = useState(null);
-  const [activeTab, setActiveTab] = useState('boq');
-  const [showNewModal, setShowNewModal] = useState(false);
-  const [showMobileFx, setShowMobileFx] = useState(false);
 
-  // New Inquiry Form State
+  const [activeModule, setActiveModule] = useState('crm');
+
+  const [inquiries, setInquiries] = useState([]);
+  const [salesOrders, setSalesOrders] = useState([]);
+  const [deliveryNotes, setDeliveryNotes] = useState([]);
+  const [invoices, setInvoices] = useState([]);
+  const [purchaseOrders, setPurchaseOrders] = useState([]);
+  const [commissions, setCommissions] = useState([]);
+
+  const [selectedInqId, setSelectedInqId] = useState(null);
+  const [showNewInqModal, setShowNewInqModal] = useState(false);
   const [newInq, setNewInq] = useState({
     clientName: '',
+    clientVat: '',
     contactPerson: '',
     phone: '',
     email: '',
     division: 'MEP',
-    assignedSalesKey: 'sales_mep',
+    salesmanId: '',
     firstItemDesc: '',
     firstItemQty: 1,
-    firstItemUnit: 'Nos',
   });
 
-  // Follow-up & Vendor Quote Form States
-  const [fuChannel, setFuChannel] = useState('Phone');
-  const [fuNote, setFuNote] = useState('');
-  const [vqSupplier, setVqSupplier] = useState('');
-  const [vqCurrency, setVqCurrency] = useState('USD');
-  const [vqAmount, setVqAmount] = useState('');
-  const [vqLeadTime, setVqLeadTime] = useState('');
+  const [deliveryModalSO, setDeliveryModalSO] = useState(null);
+  const [deliveryQtys, setDeliveryQtys] = useState({});
+  const [deliveryNotesText, setDeliveryNotesText] = useState('');
 
-  // --------------------------------------------------------------------------
-  // 1. AUTH SESSION & PROFILE INITIALIZATION
-  // --------------------------------------------------------------------------
+  const [previewInvoice, setPreviewInvoice] = useState(null);
+
+  const [paymentModalInv, setPaymentModalInv] = useState(null);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('Bank Transfer');
+  const [paymentRef, setPaymentRef] = useState('');
+
+  const [showNewPOModal, setShowNewPOModal] = useState(false);
+  const [newPO, setNewPO] = useState({
+    soId: '',
+    supplierName: '',
+    supplierVat: '',
+    currency: 'USD',
+    fxRate: 3.75,
+    landedCostSar: 0,
+    itemDesc: '',
+    itemQty: 1,
+    unitCostFx: 0,
+    isStockedItem: false,
+  });
+
+  const [settingsSavedMsg, setSettingsSavedMsg] = useState('');
+
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
-      setSession(currentSession);
-      if (currentSession?.user) {
-        loadUserProfile(currentSession.user);
-      } else {
-        setAuthLoading(false);
-      }
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      setSession(s);
+      if (s?.user) loadProfiles(s.user);
+      else setAuthLoading(false);
     });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession);
-      if (newSession?.user) {
-        loadUserProfile(newSession.user);
-      } else {
-        setProfile(null);
-        setAuthLoading(false);
-      }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
+      setSession(s);
+      if (s?.user) loadProfiles(s.user);
+      else setAuthLoading(false);
     });
-
     return () => subscription.unsubscribe();
   }, []);
 
-  const loadUserProfile = async (user) => {
-    try {
-      const { data } = await supabase
-        .from('team_profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-
-      if (data) {
-        setProfile(data);
-      } else {
-        setProfile({
-          id: user.id,
-          email: user.email,
-          full_name: user.email.split('@')[0],
-          role_key: 'manager',
-          role_label: 'Sales Manager',
-        });
-      }
-    } catch {
-      setProfile({
-        id: user.id,
-        email: user.email,
-        full_name: user.email.split('@')[0],
-        role_key: 'manager',
-        role_label: 'Sales Manager',
-      });
-    } finally {
-      setAuthLoading(false);
+  const loadProfiles = async (user) => {
+    const { data: all } = await supabase.from('team_profiles').select('*').order('full_name');
+    if (all) {
+      setTeamProfiles(all);
+      const me = all.find((p) => p.id === user.id);
+      setProfile(me || { id: user.id, email: user.email, full_name: user.email.split('@')[0], role_key: 'manager', role_label: 'Sales Manager' });
     }
+    setAuthLoading(false);
   };
 
-  // --------------------------------------------------------------------------
-  // 2. LOAD & SUBSCRIBE TO SUPABASE REALTIME DATA
-  // --------------------------------------------------------------------------
+  const refreshAllErpData = async () => {
+    setSyncStatus('syncing');
+    const [
+      settingsRes,
+      inqRes,
+      soRes,
+      dnRes,
+      invRes,
+      poRes,
+      commRes,
+      profRes,
+    ] = await Promise.all([
+      supabase.from('app_settings').select('*'),
+      supabase.from('inquiries').select('*').order('updated_at', { ascending: false }),
+      supabase.from('sales_orders').select('*').order('created_at', { ascending: false }),
+      supabase.from('delivery_notes').select('*').order('delivered_at', { ascending: false }),
+      supabase.from('invoices').select('*').order('issued_at', { ascending: false }),
+      supabase.from('purchase_orders').select('*').order('created_at', { ascending: false }),
+      supabase.from('commission_ledger').select('*').order('updated_at', { ascending: false }),
+      supabase.from('team_profiles').select('*').order('full_name'),
+    ]);
+
+    if (settingsRes.data) {
+      const fxRow = settingsRes.data.find((r) => r.key === 'fx_rates');
+      const compRow = settingsRes.data.find((r) => r.key === 'company_profile');
+      if (fxRow?.value) setFxRates(fxRow.value);
+      if (compRow?.value) setCompany({ ...DEFAULT_COMPANY, ...compRow.value });
+    }
+    if (inqRes.data) setInquiries(inqRes.data.map((r) => r.data));
+    if (soRes.data) setSalesOrders(soRes.data);
+    if (dnRes.data) setDeliveryNotes(dnRes.data);
+    if (invRes.data) setInvoices(invRes.data);
+    if (poRes.data) setPurchaseOrders(poRes.data);
+    if (commRes.data) setCommissions(commRes.data);
+    if (profRes.data) setTeamProfiles(profRes.data);
+    setSyncStatus('live');
+  };
+
   useEffect(() => {
     if (!session) return;
-    let isMounted = true;
-
-    const fetchInitialData = async () => {
-      setSyncStatus('syncing');
-      try {
-        const { data: settingsData } = await supabase
-          .from('app_settings')
-          .select('value')
-          .eq('key', 'fx_rates')
-          .single();
-
-        if (isMounted && settingsData?.value) {
-          setFxRates(settingsData.value);
-        }
-
-        const { data: inqRows, error } = await supabase
-          .from('inquiries')
-          .select('*')
-          .order('updated_at', { ascending: false });
-
-        if (!error && inqRows) {
-          if (isMounted) { setInquiries(inqRows.map((r) => r.data)); }
-        }
-        if (isMounted) setSyncStatus('live');
-      } catch {
-        if (isMounted) setSyncStatus('offline');
-      }
-    };
-
-    fetchInitialData();
+    refreshAllErpData();
 
     const channel = supabase
-      .channel('horizon-crm-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'inquiries' },
-        (payload) => {
-          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-            const updated = payload.new.data;
-            setInquiries((prev) => {
-              const exists = prev.some((i) => i.id === updated.id);
-              if (exists) return prev.map((i) => (i.id === updated.id ? updated : i));
-              return [updated, ...prev];
-            });
-          } else if (payload.eventType === 'DELETE') {
-            setInquiries((prev) => prev.filter((i) => i.id !== payload.old.id));
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'app_settings' },
-        (payload) => {
-          if (payload.new?.key === 'fx_rates' && payload.new?.value) {
-            setFxRates(payload.new.value);
-          }
-        }
-      )
+      .channel('horizon-erp-phase1')
+      .on('postgres_changes', { event: '*', schema: 'public' }, () => {
+        refreshAllErpData();
+      })
       .subscribe();
 
-    return () => {
-      isMounted = false;
-      supabase.removeChannel(channel);
-    };
+    return () => supabase.removeChannel(channel);
   }, [session]);
 
-  // --------------------------------------------------------------------------
-  // 3. PERSISTENCE HELPERS
-  // --------------------------------------------------------------------------
-  const saveInquiryToCloud = async (updatedInquiry) => {
-    setInquiries((prev) => prev.map((i) => (i.id === updatedInquiry.id ? updatedInquiry : i)));
-    setSyncStatus('syncing');
-    const { error } = await supabase.from('inquiries').upsert({
-      id: updatedInquiry.id,
-      data: updatedInquiry,
-      updated_at: new Date().toISOString(),
-      updated_by: profile?.full_name || session?.user?.email || 'Team User',
-    });
-    setSyncStatus(error ? 'offline' : 'live');
-  };
-
-  const handleFxChange = async (curr, val) => {
-    const numeric = parseFloat(val) || 0;
-    const nextFx = { ...fxRates, [curr]: numeric };
-    setFxRates(nextFx);
-    await supabase.from('app_settings').upsert({
-      key: 'fx_rates',
-      value: nextFx,
-      updated_at: new Date().toISOString(),
-    });
-  };
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    setSelectedId(null);
-  };
-
-  // --------------------------------------------------------------------------
-  // 4. FILTERED PIPELINE & KPI METRICS
-  // --------------------------------------------------------------------------
-  const filteredInquiries = useMemo(() => {
-    return inquiries.filter((inq) => {
-      if (stageFilter !== 'all' && inq.stage !== stageFilter) return false;
-
-      if (activeRoleFilter === 'sales_mep' && inq.assignedSalesKey !== 'sales_mep') return false;
-      if (activeRoleFilter === 'sales_it' && inq.assignedSalesKey !== 'sales_it') return false;
-      if (activeRoleFilter === 'purchase' && inq.stage !== 'rfq_suppliers') return false;
-      if (activeRoleFilter === 'coordinator' && !['quoted', 'follow_up'].includes(inq.stage)) return false;
-      if (activeRoleFilter === 'manager' && inq.stage !== 'manager_approval') return false;
-
-      if (searchTerm.trim()) {
-        const q = searchTerm.toLowerCase();
-        const match =
-          inq.clientName.toLowerCase().includes(q) ||
-          inq.refNo.toLowerCase().includes(q) ||
-          inq.contactPerson.toLowerCase().includes(q) ||
-          inq.division.toLowerCase().includes(q);
-        if (!match) return false;
-      }
-      return true;
-    });
-  }, [inquiries, stageFilter, activeRoleFilter, searchTerm]);
-
-  const kpis = useMemo(() => {
-    let activePipelineSAR = 0;
-    let wonSAR = 0;
-    let pendingApprovalCount = 0;
-    let overdueFollowUpsCount = 0;
-
-    inquiries.forEach((inq) => {
-      const { grandTotalSAR } = computeFinancials(inq, fxRates);
-      if (inq.stage === 'won') wonSAR += grandTotalSAR;
-      else if (inq.stage !== 'lost') activePipelineSAR += grandTotalSAR;
-
-      if (inq.stage === 'manager_approval') pendingApprovalCount += 1;
-      if (isFollowUpOverdue(inq)) overdueFollowUpsCount += 1;
-    });
-
-    return { activePipelineSAR, wonSAR, pendingApprovalCount, overdueFollowUpsCount };
-  }, [inquiries, fxRates]);
-
-  const selectedInquiry = useMemo(
-    () => inquiries.find((i) => i.id === selectedId) || null,
-    [inquiries, selectedId]
+  const salesmenList = useMemo(
+    () => teamProfiles.filter((p) => p.is_salesman || ['sales_mep', 'sales_it'].includes(p.role_key)),
+    [teamProfiles]
   );
 
-  // --------------------------------------------------------------------------
-  // 5. ACTION HANDLERS
-  // --------------------------------------------------------------------------
+  const annualTaxableRevenueSAR = useMemo(
+    () => invoices.reduce((sum, inv) => sum + Number(inv.subtotal_sar || 0), 0),
+    [invoices]
+  );
+  const zatcaAdvice = useMemo(
+    () => getZatcaComplianceAdvice(annualTaxableRevenueSAR, company.zatcaPhase2Connected),
+    [annualTaxableRevenueSAR, company.zatcaPhase2Connected]
+  );
+
   const handleCreateInquiry = async (e) => {
     e.preventDefault();
-    const num = Math.floor(103 + Math.random() * 890);
-    const salesName = newInq.assignedSalesKey === 'sales_mep' ? 'Tariq Al-Harbi' : 'Faisal Al-Otaibi';
-    const divCode = newInq.division === 'MEP' ? 'MEP' : 'IT';
-    const createdObj = {
-      id: `INQ-2026-${num}`,
-      refNo: `HBS-${divCode}-26-${num}`,
+    const num = Math.floor(101 + Math.random() * 898);
+    const chosenSalesman = teamProfiles.find((p) => p.id === newInq.salesmanId) || salesmenList[0];
+    const obj = {
+      id: `INQ-${new Date().getFullYear()}-${num}`,
+      refNo: `HBS-${newInq.division === 'MEP' ? 'MEP' : 'IT'}-${num}`,
       clientName: newInq.clientName,
+      clientVat: newInq.clientVat,
       contactPerson: newInq.contactPerson,
       phone: newInq.phone,
       email: newInq.email,
       division: newInq.division,
-      assignedSalesKey: newInq.assignedSalesKey,
-      assignedSalesName: salesName,
+      salesmanId: chosenSalesman?.id || null,
+      assignedSalesName: chosenSalesman?.full_name || 'Unassigned',
+      commissionPct: Number(chosenSalesman?.commission_pct || 0),
       stage: 'new_inquiry',
       marginPercent: 20,
       managerApproved: false,
-      approvedBy: '',
-      approvedAt: '',
       createdAt: new Date().toISOString(),
-      lastFollowUpAt: new Date().toISOString(),
       boqItems: [
         {
           id: `b-${Date.now()}`,
-          desc: newInq.firstItemDesc || 'Supply & Delivery as per Client RFQ',
+          desc: newInq.firstItemDesc,
           qty: Number(newInq.firstItemQty) || 1,
-          unit: newInq.firstItemUnit || 'Lot',
+          unit: 'Nos',
           buyCurrency: 'USD',
           buyUnitCost: 0,
-          supplier: 'TBD',
-        },
-      ],
-      vendorQuotes: [],
-      followUps: [
-        {
-          id: `f-${Date.now()}`,
-          channel: 'Email',
-          note: `Inquiry logged by ${profile?.full_name || 'Sales Team'}.`,
-          by: profile?.full_name || 'Team',
-          at: new Date().toISOString(),
         },
       ],
     };
-
-    setInquiries((prev) => [createdObj, ...prev]);
-    setShowNewModal(false);
-    setSelectedId(createdObj.id);
-    setNewInq({
-      clientName: '',
-      contactPerson: '',
-      phone: '',
-      email: '',
-      division: 'MEP',
-      assignedSalesKey: 'sales_mep',
-      firstItemDesc: '',
-      firstItemQty: 1,
-      firstItemUnit: 'Nos',
-    });
-
     await supabase.from('inquiries').upsert({
-      id: createdObj.id,
-      data: createdObj,
+      id: obj.id,
+      data: obj,
       updated_at: new Date().toISOString(),
-      updated_by: profile?.full_name || 'Team',
+      updated_by: profile?.full_name || 'ERP User',
+    });
+    setShowNewInqModal(false);
+    setSelectedInqId(obj.id);
+    setNewInq({ clientName: '', clientVat: '', contactPerson: '', phone: '', email: '', division: 'MEP', salesmanId: '', firstItemDesc: '', firstItemQty: 1 });
+    refreshAllErpData();
+  };
+
+  const saveInquiryPatch = async (inq, patch) => {
+    const updated = { ...inq, ...patch };
+    setInquiries((prev) => prev.map((i) => (i.id === inq.id ? updated : i)));
+    await supabase.from('inquiries').upsert({
+      id: inq.id,
+      data: updated,
+      updated_at: new Date().toISOString(),
+      updated_by: profile?.full_name || 'ERP User',
     });
   };
 
-  const updateSelectedField = (patch) => {
-    if (!selectedInquiry) return;
-    const updated = { ...selectedInquiry, ...patch };
-    saveInquiryToCloud(updated);
+  const handleConvertQuoteToSO = async (inq) => {
+    const fin = computeQuoteFinancials(inq, fxRates);
+    const marginFactor = fin.totalCostSAR > 0 ? fin.sellNetSAR / fin.totalCostSAR : 1.25;
+    const soNum = `SO-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 8999)}`;
+
+    const soItems = (inq.boqItems || []).map((b) => {
+      const unitCostSar = (Number(b.buyUnitCost) || 0) * (fxRates[b.buyCurrency] || 1);
+      const unitSellSar = unitCostSar > 0 ? unitCostSar * marginFactor : 0;
+      return {
+        id: b.id,
+        desc: b.desc,
+        orderedQty: Number(b.qty) || 1,
+        deliveredQty: 0,
+        invoicedQty: 0,
+        unit: b.unit || 'Nos',
+        unitCostSar,
+        unitSellSar,
+      };
+    });
+
+    const newSO = {
+      id: `so-${Date.now()}`,
+      so_number: soNum,
+      inquiry_id: inq.id,
+      client_name: inq.clientName,
+      client_vat: inq.clientVat || '',
+      contact_person: inq.contactPerson,
+      phone: inq.phone,
+      email: inq.email || '',
+      division: inq.division,
+      salesman_id: inq.salesmanId || null,
+      salesman_name: inq.assignedSalesName,
+      commission_pct: Number(inq.commissionPct || 0),
+      status: 'open',
+      items: soItems,
+      subtotal_sar: Number(fin.sellNetSAR.toFixed(2)),
+      vat_sar: Number(fin.vatSAR.toFixed(2)),
+      grand_total_sar: Number(fin.grandTotalSAR.toFixed(2)),
+      total_cost_sar: Number(fin.totalCostSAR.toFixed(2)),
+    };
+
+    await supabase.from('sales_orders').insert(newSO);
+    await saveInquiryPatch(inq, { stage: 'won' });
+
+    setSelectedInqId(null);
+    setActiveModule('sales_orders');
+    refreshAllErpData();
   };
 
-  const handleBoqItemChange = (itemId, field, value) => {
-    if (!selectedInquiry) return;
-    const updatedBoq = selectedInquiry.boqItems.map((item) =>
-      item.id === itemId ? { ...item, [field]: value } : item
+  const openDeliveryModal = (so) => {
+    const initialQtys = {};
+    (so.items || []).forEach((it) => {
+      const remaining = Math.max(0, Number(it.orderedQty) - Number(it.deliveredQty || 0));
+      initialQtys[it.id] = remaining;
+    });
+    setDeliveryQtys(initialQtys);
+    setDeliveryNotesText('');
+    setDeliveryModalSO(so);
+  };
+
+  const handleRecordDelivery = async (e) => {
+    e.preventDefault();
+    if (!deliveryModalSO) return;
+
+    const deliveredLines = [];
+    let allDelivered = true;
+
+    const updatedItems = (deliveryModalSO.items || []).map((it) => {
+      const shipNow = Math.min(
+        Number(deliveryQtys[it.id] || 0),
+        Math.max(0, Number(it.orderedQty) - Number(it.deliveredQty || 0))
+      );
+      if (shipNow > 0) {
+        deliveredLines.push({
+          id: it.id,
+          desc: it.desc,
+          qty: shipNow,
+          unit: it.unit,
+          unitSellSar: it.unitSellSar,
+          unitCostSar: it.unitCostSar,
+        });
+      }
+      const nextDelivered = Number(it.deliveredQty || 0) + shipNow;
+      if (nextDelivered < Number(it.orderedQty)) allDelivered = false;
+      return { ...it, deliveredQty: nextDelivered };
+    });
+
+    if (deliveredLines.length === 0) return;
+
+    const dnNum = `DN-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 8999)}`;
+    const newDN = {
+      id: `dn-${Date.now()}`,
+      dn_number: dnNum,
+      so_id: deliveryModalSO.id,
+      so_number: deliveryModalSO.so_number,
+      client_name: deliveryModalSO.client_name,
+      delivery_type: allDelivered ? 'full' : 'partial',
+      items: deliveredLines,
+      delivered_by: profile?.full_name || 'Logistics',
+      notes: deliveryNotesText,
+    };
+
+    await supabase.from('delivery_notes').insert(newDN);
+    await supabase
+      .from('sales_orders')
+      .update({
+        items: updatedItems,
+        status: allDelivered ? 'delivered' : 'partially_delivered',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', deliveryModalSO.id);
+
+    setDeliveryModalSO(null);
+    refreshAllErpData();
+  };
+
+  const handleGenerateZatcaInvoiceFromDN = async (dn) => {
+    const parentSO = salesOrders.find((s) => s.id === dn.so_id);
+    const subtotal = (dn.items || []).reduce((s, it) => s + Number(it.qty) * Number(it.unitSellSar), 0);
+    const landedCost = (dn.items || []).reduce((s, it) => s + Number(it.qty) * Number(it.unitCostSar || 0), 0);
+    const vat = subtotal * 0.15;
+    const grandTotal = subtotal + vat;
+    const invNum = `INV-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 89999)}`;
+    const issuedIso = new Date().toISOString();
+
+    const qrBase64 = generateZatcaQrBase64({
+      sellerName: company.nameEn,
+      vatNumber: company.vatNumber,
+      timestampIso: issuedIso,
+      totalWithVat: grandTotal,
+      vatAmount: vat,
+    });
+
+    const newInv = {
+      id: `inv-${Date.now()}`,
+      invoice_number: invNum,
+      invoice_type: parentSO?.client_vat ? 'standard' : 'simplified',
+      so_id: dn.so_id,
+      so_number: dn.so_number,
+      dn_id: dn.id,
+      client_name: dn.client_name,
+      client_vat: parentSO?.client_vat || '',
+      salesman_id: parentSO?.salesman_id || null,
+      salesman_name: parentSO?.salesman_name || 'Unassigned',
+      commission_pct: Number(parentSO?.commission_pct || 0),
+      items: dn.items,
+      subtotal_sar: Number(subtotal.toFixed(2)),
+      vat_sar: Number(vat.toFixed(2)),
+      grand_total_sar: Number(grandTotal.toFixed(2)),
+      landed_cost_sar: Number(landedCost.toFixed(2)),
+      paid_amount_sar: 0,
+      payment_status: 'unpaid',
+      zatca_status: company.zatcaPhase2Connected ? 'cleared' : 'phase1_qr_ready',
+      qr_base64: qrBase64,
+      locked: true,
+      issued_at: issuedIso,
+    };
+
+    const { data: insertedInv } = await supabase.from('invoices').insert(newInv).select().single();
+
+    const netProfit = Math.max(0, subtotal - landedCost);
+    const commPct = Number(parentSO?.commission_pct || 0);
+    const totalEligibleComm = (netProfit * commPct) / 100;
+
+    if (commPct > 0 && totalEligibleComm > 0) {
+      await supabase.from('commission_ledger').insert({
+        id: `comm-${Date.now()}`,
+        invoice_id: insertedInv?.id || newInv.id,
+        invoice_number: invNum,
+        client_name: dn.client_name,
+        salesman_id: parentSO?.salesman_id || null,
+        salesman_name: parentSO?.salesman_name || 'Salesman',
+        commission_pct: commPct,
+        net_profit_sar: Number(netProfit.toFixed(2)),
+        total_eligible_commission_sar: Number(totalEligibleComm.toFixed(2)),
+        unlocked_commission_sar: 0,
+        paid_out_sar: 0,
+        status: 'awaiting_collection',
+      });
+    }
+
+    setActiveModule('invoices');
+    if (insertedInv) setPreviewInvoice(insertedInv);
+    refreshAllErpData();
+  };
+
+  const handleRecordCustomerPayment = async (e) => {
+    e.preventDefault();
+    if (!paymentModalInv) return;
+
+    const amt = parseFloat(paymentAmount) || 0;
+    if (amt <= 0) return;
+
+    const newPaidTotal = Math.min(
+      Number(paymentModalInv.grand_total_sar),
+      Number(paymentModalInv.paid_amount_sar || 0) + amt
     );
-    updateSelectedField({ boqItems: updatedBoq });
-  };
+    const isFullyPaid = newPaidTotal >= Number(paymentModalInv.grand_total_sar) - 0.01;
 
-  const handleAddBoqRow = () => {
-    if (!selectedInquiry) return;
-    const newRow = {
-      id: `b-${Date.now()}`,
-      desc: 'New BOQ Line Item',
-      qty: 1,
-      unit: 'Nos',
-      buyCurrency: 'USD',
-      buyUnitCost: 0,
-      supplier: '',
-    };
-    updateSelectedField({ boqItems: [...selectedInquiry.boqItems, newRow] });
-  };
-
-  const handleRemoveBoqRow = (itemId) => {
-    if (!selectedInquiry || selectedInquiry.boqItems.length <= 1) return;
-    updateSelectedField({
-      boqItems: selectedInquiry.boqItems.filter((item) => item.id !== itemId),
+    await supabase.from('customer_receipts').insert({
+      id: `rcp-${Date.now()}`,
+      receipt_number: `RCP-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 8999)}`,
+      invoice_id: paymentModalInv.id,
+      invoice_number: paymentModalInv.invoice_number,
+      client_name: paymentModalInv.client_name,
+      amount_sar: amt,
+      payment_method: paymentMethod,
+      reference_no: paymentRef,
+      recorded_by: profile?.full_name || 'Finance',
     });
+
+    await supabase
+      .from('invoices')
+      .update({
+        paid_amount_sar: Number(newPaidTotal.toFixed(2)),
+        payment_status: isFullyPaid ? 'paid' : 'partial',
+      })
+      .eq('id', paymentModalInv.id);
+
+    const commRow = commissions.find((c) => c.invoice_id === paymentModalInv.id);
+    if (commRow) {
+      const collectionRatio = Math.min(1, newPaidTotal / Number(paymentModalInv.grand_total_sar || 1));
+      const unlockedSar = Number((Number(commRow.total_eligible_commission_sar) * collectionRatio).toFixed(2));
+      await supabase
+        .from('commission_ledger')
+        .update({
+          unlocked_commission_sar: unlockedSar,
+          status: collectionRatio >= 0.999 ? 'ready_for_payout' : 'partially_unlocked',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', commRow.id);
+    }
+
+    setPaymentModalInv(null);
+    setPaymentAmount('');
+    setPaymentRef('');
+    refreshAllErpData();
   };
 
-  const handleAddVendorQuote = (e) => {
+  const handleCreatePO = async (e) => {
     e.preventDefault();
-    if (!selectedInquiry || !vqSupplier || !vqAmount) return;
-    const newQuote = {
-      id: `vq-${Date.now()}`,
-      supplier: vqSupplier,
-      currency: vqCurrency,
-      amount: parseFloat(vqAmount) || 0,
-      leadTime: vqLeadTime || '2 Weeks',
-      selected: selectedInquiry.vendorQuotes.length === 0,
-    };
-    updateSelectedField({ vendorQuotes: [...selectedInquiry.vendorQuotes, newQuote] });
-    setVqSupplier('');
-    setVqAmount('');
-    setVqLeadTime('');
-  };
+    const linkedSO = salesOrders.find((s) => s.id === newPO.soId);
+    const goodsFx = (Number(newPO.itemQty) || 1) * (Number(newPO.unitCostFx) || 0);
+    const goodsSar = goodsFx * (Number(newPO.fxRate) || 1);
+    const landedSar = Number(newPO.landedCostSar) || 0;
+    const vatSar = newPO.supplierVat ? (goodsSar + landedSar) * 0.15 : 0;
 
-  const handleManagerApprove = () => {
-    if (!selectedInquiry) return;
-    const approver = profile?.full_name || 'Omar Al-Ghamdi (Sales Manager)';
-    const logEntry = {
-      id: `f-${Date.now()}`,
-      channel: 'Approval',
-      note: `Sales Manager approval recorded by ${approver}. Ready to issue SAR quotation.`,
-      by: approver,
-      at: new Date().toISOString(),
-    };
-    updateSelectedField({
-      managerApproved: true,
-      approvedBy: approver,
-      approvedAt: new Date().toISOString(),
-      stage: 'quoted',
-      followUps: [logEntry, ...(selectedInquiry.followUps || [])],
+    await supabase.from('purchase_orders').insert({
+      id: `po-${Date.now()}`,
+      po_number: `PO-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 8999)}`,
+      so_id: linkedSO?.id || null,
+      so_number: linkedSO?.so_number || '',
+      supplier_name: newPO.supplierName,
+      supplier_vat: newPO.supplierVat,
+      currency: newPO.currency,
+      fx_rate: Number(newPO.fxRate) || 1,
+      status: 'po_issued',
+      items: [
+        {
+          desc: newPO.itemDesc,
+          qty: Number(newPO.itemQty) || 1,
+          unitCostFx: Number(newPO.unitCostFx) || 0,
+          is_stocked_item: newPO.isStockedItem,
+        },
+      ],
+      goods_total_fx: Number(goodsFx.toFixed(2)),
+      goods_total_sar: Number(goodsSar.toFixed(2)),
+      landed_cost_sar: Number(landedSar.toFixed(2)),
+      supplier_vat_sar: Number(vatSar.toFixed(2)),
+      bill_status: 'unbilled',
     });
+
+    setShowNewPOModal(false);
+    refreshAllErpData();
   };
 
-  const handleAddFollowUp = (e) => {
+  const advancePurchaseStage = async (po, nextStatus, extraPatch = {}) => {
+    await supabase
+      .from('purchase_orders')
+      .update({ status: nextStatus, ...extraPatch, updated_at: new Date().toISOString() })
+      .eq('id', po.id);
+    refreshAllErpData();
+  };
+
+  const handleSaveCompanySettings = async (e) => {
     e.preventDefault();
-    if (!selectedInquiry || !fuNote.trim()) return;
-    const nowIso = new Date().toISOString();
-    const entry = {
-      id: `f-${Date.now()}`,
-      channel: fuChannel,
-      note: fuNote.trim(),
-      by: profile?.full_name || 'Sales Coordinator',
-      at: nowIso,
-    };
-    updateSelectedField({
-      lastFollowUpAt: nowIso,
-      stage: selectedInquiry.stage === 'quoted' ? 'follow_up' : selectedInquiry.stage,
-      followUps: [entry, ...(selectedInquiry.followUps || [])],
+    await supabase.from('app_settings').upsert({
+      key: 'company_profile',
+      value: company,
+      updated_at: new Date().toISOString(),
     });
-    setFuNote('');
+    setSettingsSavedMsg('Company & ZATCA settings saved and synced across all users.');
+    setTimeout(() => setSettingsSavedMsg(''), 4000);
   };
 
-  // --------------------------------------------------------------------------
-  // RENDER AUTH GATE OR MAIN CRM
-  // --------------------------------------------------------------------------
+  const handleUpdateSalesmanRule = async (userId, isSalesman, commissionPct) => {
+    await supabase
+      .from('team_profiles')
+      .update({
+        is_salesman: isSalesman,
+        commission_pct: parseFloat(commissionPct) || 0,
+      })
+      .eq('id', userId);
+    refreshAllErpData();
+  };
+
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-4">
-        <div className="flex items-center gap-3 text-slate-300">
-          <RefreshCw className="w-5 h-5 animate-spin text-blue-400" />
-          <span className="text-sm font-medium">Loading Horizon Portal...</span>
-        </div>
+      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
+        <RefreshCw className="w-6 h-6 animate-spin text-blue-400" />
       </div>
     );
   }
 
   if (!session) {
-    return <LoginLandingPage onLoginSuccess={(user) => setSession({ user })} />;
+    return <LoginLandingPage company={company} onLoginSuccess={(u) => setSession({ user: u })} />;
   }
 
+  const selectedInq = inquiries.find((i) => i.id === selectedInqId) || null;
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-20 sm:pb-8">
-      {/* Top Corporate Navigation Bar */}
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-24 sm:pb-10">
       <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-3.5 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-2">
+        <div className="max-w-7xl mx-auto px-3.5 sm:px-6 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-600 flex items-center justify-center font-bold text-base sm:text-lg shrink-0">
+            <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center font-bold text-base shrink-0">
               H
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                <h1 className="font-bold text-sm sm:text-lg tracking-tight truncate">
-                  Horizon Business Solutions
-                </h1>
-                <span
-                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium shrink-0 ${
-                    syncStatus === 'live'
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                  }`}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
-                  <span className="hidden xs:inline">{syncStatus === 'live' ? 'Live' : 'Sync'}</span>
+              <div className="flex items-center gap-2">
+                <h1 className="font-bold text-sm sm:text-base truncate">{company.nameEn}</h1>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  ERP Phase 1 • {syncStatus === 'live' ? 'Live' : 'Sync'}
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 truncate">
-                {profile?.full_name} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ <span className="text-blue-300">{profile?.role_label}</span>
+                {profile?.full_name} ({profile?.role_label}) • VAT: {company.vatNumber}
               </p>
             </div>
           </div>
 
-          {/* Right Header Controls */}
-          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
-            <button
-              onClick={() => setShowMobileFx(!showMobileFx)}
-              className="sm:hidden px-2.5 py-2 rounded-xl bg-slate-800 text-amber-300 text-xs font-semibold flex items-center gap-1"
-            >
-              <Globe className="w-3.5 h-3.5" /> FX
-              {showMobileFx ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            </button>
-
-            <button
-              onClick={() => setShowNewModal(true)}
-              className="hidden sm:flex px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold items-center gap-1.5 transition cursor-pointer"
-            >
-              <Plus className="w-4 h-4" /> New Inquiry
-            </button>
-
-            <button
-              onClick={handleSignOut}
-              title="Sign Out"
-              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
+          <button
+            onClick={() => supabase.auth.signOut()}
+            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
+            title="Sign Out"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
 
-        {/* FX Exchange Rates Strip (Always visible on Desktop, collapsible on Mobile) */}
-        <div className={`${showMobileFx ? 'block' : 'hidden'} sm:block bg-slate-950/95 border-t border-slate-800/80 px-3.5 sm:px-6 py-2.5`}>
-          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-            <div className="flex items-center gap-1.5 text-slate-400 font-medium">
-              <Globe className="w-3.5 h-3.5 text-blue-400" />
-              <span>FX to SAR (Shared Live):</span>
-            </div>
-            <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
-              {['USD', 'EUR', 'GBP', 'AED'].map((curr) => (
-                <label
-                  key={curr}
-                  className="flex items-center justify-between sm:justify-start gap-1.5 bg-slate-900 border border-slate-800 px-2.5 py-1.5 sm:py-1 rounded-lg"
-                >
-                  <span className="text-slate-400 font-semibold">1 {curr}</span>
-                  <input
-                    type="number"
-                    step="0.001"
-                    value={fxRates[curr] ?? ''}
-                    onChange={(e) => handleFxChange(curr, e.target.value)}
-                    className="w-16 bg-transparent text-amber-300 font-bold focus:outline-none text-right text-base sm:text-xs"
-                  />
-                </label>
-              ))}
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content Container */}
-      <main className="max-w-7xl mx-auto px-3.5 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
-        {/* Compact 2x2 KPI Grid on Mobile, 4-Col on Desktop */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
-          <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm">
-            <div className="text-[11px] sm:text-xs font-medium text-slate-500">Active Pipeline</div>
-            <div className="mt-0.5 sm:mt-1 text-base sm:text-xl font-bold text-slate-900">
-              <span className="sm:hidden">SAR {formatCompactSAR(kpis.activePipelineSAR)}</span>
-              <span className="hidden sm:inline">SAR {formatSAR(kpis.activePipelineSAR)}</span>
-            </div>
-          </div>
-          <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm">
-            <div className="text-[11px] sm:text-xs font-medium text-slate-500">Won / POs</div>
-            <div className="mt-0.5 sm:mt-1 text-base sm:text-xl font-bold text-emerald-600">
-              <span className="sm:hidden">SAR {formatCompactSAR(kpis.wonSAR)}</span>
-              <span className="hidden sm:inline">SAR {formatSAR(kpis.wonSAR)}</span>
-            </div>
-          </div>
-          <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm">
-            <div className="text-[11px] sm:text-xs font-medium text-slate-500">Manager Approval</div>
-            <div className="mt-0.5 sm:mt-1 text-base sm:text-xl font-bold text-purple-600">
-              {kpis.pendingApprovalCount} Pending
-            </div>
-          </div>
-          <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm">
-            <div className="text-[11px] sm:text-xs font-medium text-slate-500">Follow-Up Alerts</div>
-            <div className="mt-0.5 sm:mt-1 text-base sm:text-xl font-bold text-rose-600">
-              {kpis.overdueFollowUpsCount} Overdue
-            </div>
-          </div>
-        </div>
-
-        {/* Horizontal Scrollable Role & Stage Filters */}
-        <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-            {/* Swipeable Role Pills */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-              {ROLES.map((r) => (
-                <button
-                  key={r.key}
-                  onClick={() => setActiveRoleFilter(r.key)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer shrink-0 ${
-                    activeRoleFilter === r.key
-                      ? 'bg-slate-900 text-white shadow-sm'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  <span className="sm:hidden">{r.short}</span>
-                  <span className="hidden sm:inline">{r.label}</span>
-                </button>
-              ))}
-            </div>
-
-            <div className="relative w-full sm:w-64">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search client, ref, division..."
-                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-base sm:text-xs focus:outline-none focus:border-blue-500"
-              />
-            </div>
-          </div>
-
-          {/* Swipeable Stage Filter Pills */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pt-2 border-t border-slate-100 pb-0.5">
-            <button
-              onClick={() => setStageFilter('all')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap shrink-0 cursor-pointer ${
-                stageFilter === 'all' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              All ({inquiries.length})
-            </button>
-            {STAGES.map((st) => {
-              const count = inquiries.filter((i) => i.stage === st.id).length;
+        <div className="bg-slate-950 border-t border-slate-800 px-3.5 sm:px-6">
+          <div className="max-w-7xl mx-auto flex items-center gap-1.5 overflow-x-auto py-2">
+            {[
+              { id: 'crm', label: '1. Quotes & CRM', icon: Layers, count: inquiries.length },
+              { id: 'sales_orders', label: '2. Sales Orders & Deliveries', icon: Truck, count: salesOrders.length },
+              { id: 'invoices', label: '3. ZATCA Invoices & AR', icon: Receipt, count: invoices.length },
+              { id: 'purchase', label: '4. Purchase Cycle', icon: ShoppingBag, count: purchaseOrders.length },
+              { id: 'profit_share', label: '5. Sales Profit Share', icon: Percent, count: commissions.length },
+              { id: 'settings', label: '6. Company & Salesman Rules', icon: Settings },
+            ].map((mod) => {
+              const Icon = mod.icon;
               return (
                 <button
-                  key={st.id}
-                  onClick={() => setStageFilter(st.id)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap shrink-0 cursor-pointer ${
-                    stageFilter === st.id ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+                  key={mod.id}
+                  onClick={() => setActiveModule(mod.id)}
+                  className={`px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap flex items-center gap-1.5 transition cursor-pointer ${
+                    activeModule === mod.id
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-900'
                   }`}
                 >
-                  <span className="sm:hidden">{st.short} ({count})</span>
-                  <span className="hidden sm:inline">{st.label} ({count})</span>
+                  <Icon className="w-3.5 h-3.5" />
+                  <span>{mod.label}</span>
+                  {typeof mod.count === 'number' && (
+                    <span className="px-1.5 py-0.2 rounded-full bg-black/25 text-[10px]">{mod.count}</span>
+                  )}
                 </button>
               );
             })}
           </div>
         </div>
+      </header>
 
-        {/* Inquiries Pipeline Cards */}
-        <div className="grid gap-3">
-          {filteredInquiries.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-slate-500 text-sm">
-              No inquiries match the selected role or stage filter.
+      <main className="max-w-7xl mx-auto px-3.5 sm:px-6 py-5 space-y-5">
+        <div className={`p-3.5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs ${zatcaAdvice.badgeClass}`}>
+          <div className="flex items-start sm:items-center gap-2">
+            <QrCode className="w-4 h-4 shrink-0 mt-0.5 sm:mt-0" />
+            <div>
+              <span className="font-bold">{zatcaAdvice.wave}: </span>
+              <span>{zatcaAdvice.statusText}</span>
             </div>
-          ) : (
-            filteredInquiries.map((inq) => {
-              const stageMeta = STAGES.find((s) => s.id === inq.stage) || STAGES[0];
-              const fin = computeFinancials(inq, fxRates);
-              const overdue = isFollowUpOverdue(inq);
-
-              return (
-                <div
-                  key={inq.id}
-                  onClick={() => {
-                    setSelectedId(inq.id);
-                    setActiveTab('boq');
-                  }}
-                  className="bg-white active:bg-slate-50 hover:border-blue-400 border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm transition cursor-pointer flex flex-col lg:flex-row lg:items-center justify-between gap-3.5"
-                >
-                  <div className="space-y-1.5">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
-                        {inq.refNo}
-                      </span>
-                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
-                        {inq.division}
-                      </span>
-                      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${stageMeta.badge}`}>
-                        {stageMeta.label}
-                      </span>
-                      {inq.managerApproved && (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                          <CheckCircle2 className="w-3 h-3" /> Approved
-                        </span>
-                      )}
-                      {overdue && (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full">
-                          <AlertTriangle className="w-3 h-3" /> &gt;48h Due
-                        </span>
-                      )}
-                    </div>
-
-                    <h3 className="text-base font-bold text-slate-900 leading-snug">{inq.clientName}</h3>
-
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
-                      <span>Contact: <strong className="text-slate-700">{inq.contactPerson}</strong></span>
-                      <span>Sales: <strong className="text-slate-700">{inq.assignedSalesName}</strong></span>
-                      <span>Next: <strong className="text-blue-700">{stageMeta.owner}</strong></span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between lg:justify-end gap-4 pt-2.5 lg:pt-0 border-t lg:border-t-0 border-slate-100">
-                    <div className="text-left lg:text-right">
-                      <div className="text-[11px] text-slate-400">Total (Incl. 15% VAT)</div>
-                      <div className="text-base font-bold text-slate-900">SAR {formatSAR(fin.grandTotalSAR)}</div>
-                      <div className="text-[11px] text-emerald-600 font-medium">
-                        Margin {inq.marginPercent}% ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Profit SAR {formatSAR(fin.profitSAR)}
-                      </div>
-                    </div>
-
-                    {/* Quick Mobile Call / WhatsApp Action Buttons */}
-                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                      <a
-                        href={`tel:${inq.phone}`}
-                        className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700"
-                        title="Call Client"
-                      >
-                        <Phone className="w-4 h-4" />
-                      </a>
-                      <a
-                        href={`https://wa.me/${inq.phone.replace(/[^0-9]/g, '')}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="p-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700"
-                        title="WhatsApp Client"
-                      >
-                        <MessageSquare className="w-4 h-4" />
-                      </a>
-                      <button
-                        onClick={() => {
-                          setSelectedId(inq.id);
-                          setActiveTab('boq');
-                        }}
-                        className="p-2.5 rounded-xl bg-blue-50 text-blue-600"
-                      >
-                        <ChevronRight className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-          )}
+          </div>
+          <div className="font-bold whitespace-nowrap">
+            YTD Taxable Sales: SAR {formatSAR(annualTaxableRevenueSAR)}
+          </div>
         </div>
-      </main>
 
-      {/* ==================================================================== */}
-      {/* MOBILE FIXED BOTTOM NAVIGATION BAR                                   */}
-      {/* ==================================================================== */}
-      <nav className="sm:hidden fixed bottom-0 inset-x-0 bg-slate-900 text-slate-300 border-t border-slate-800 z-30 flex items-center justify-around py-2 px-2">
-        <button
-          onClick={() => {
-            setActiveRoleFilter('all');
-            setStageFilter('all');
-          }}
-          className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl text-[11px] font-medium ${
-            activeRoleFilter === 'all' ? 'text-blue-400' : 'text-slate-400'
-          }`}
-        >
-          <LayoutList className="w-5 h-5" />
-          <span>All Deals</span>
-        </button>
-
-        <button
-          onClick={() => setActiveRoleFilter(profile?.role_key || 'all')}
-          className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl text-[11px] font-medium ${
-            activeRoleFilter !== 'all' ? 'text-blue-400' : 'text-slate-400'
-          }`}
-        >
-          <UserCheck className="w-5 h-5" />
-          <span>My Queue</span>
-        </button>
-
-        <button
-          onClick={() => setShowNewModal(true)}
-          className="flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-blue-600 text-white text-xs font-bold shadow-lg shadow-blue-600/30"
-        >
-          <Plus className="w-4 h-4" />
-          <span>New Inquiry</span>
-        </button>
-      </nav>
-
-      {/* ==================================================================== */}
-      {/* FULL-SCREEN MOBILE / SLIDE-OVER DESKTOP INQUIRY WORKSPACE            */}
-      {/* ==================================================================== */}
-      {selectedInquiry && (
-        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-40 flex justify-end">
-          <div className="bg-white w-full max-w-4xl h-full overflow-y-auto shadow-2xl flex flex-col">
-            {/* Workspace Header */}
-            <div className="p-4 sm:p-5 bg-slate-900 text-white flex items-start justify-between gap-3 sticky top-0 z-10">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-blue-300 font-semibold">
-                  <span>{selectedInquiry.refNo}</span>
-                  <span>ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢</span>
-                  <span>{selectedInquiry.division}</span>
-                  <span>ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢</span>
-                  <span>{selectedInquiry.assignedSalesName}</span>
-                </div>
-                <h2 className="text-lg sm:text-xl font-bold mt-1 truncate">{selectedInquiry.clientName}</h2>
-                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300 mt-1">
-                  <span>{selectedInquiry.contactPerson}</span>
-                  <a href={`tel:${selectedInquiry.phone}`} className="text-blue-300 underline">
-                    {selectedInquiry.phone}
-                  </a>
-                </div>
-              </div>
+        {activeModule === 'crm' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base sm:text-lg font-bold text-slate-900">Inquiries &amp; Commercial Quotations</h2>
               <button
-                onClick={() => setSelectedId(null)}
-                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 shrink-0 cursor-pointer"
+                onClick={() => setShowNewInqModal(true)}
+                className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <Plus className="w-4 h-4" /> New Inquiry
               </button>
             </div>
 
-            {/* Stage Selector & Sales Manager Approval */}
-            <div className="p-3.5 sm:p-4 bg-slate-100 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-slate-600 shrink-0">Stage:</span>
-                <select
-                  value={selectedInquiry.stage}
-                  onChange={(e) => updateSelectedField({ stage: e.target.value })}
-                  className="w-full sm:w-auto bg-white border border-slate-300 rounded-xl px-3 py-2 text-base sm:text-xs font-semibold text-slate-800"
+            {inquiries.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center space-y-3">
+                <p className="text-sm text-slate-500">No active inquiries yet. Log your first client RFQ to start the Order-to-Cash cycle.</p>
+                <button
+                  onClick={() => setShowNewInqModal(true)}
+                  className="px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
                 >
-                  {STAGES.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.label} ({s.owner})
-                    </option>
-                  ))}
-                </select>
+                  <Plus className="w-4 h-4" /> Create First Inquiry
+                </button>
               </div>
+            ) : (
+              <div className="grid gap-3">
+                {inquiries.map((inq) => {
+                  const fin = computeQuoteFinancials(inq, fxRates);
+                  return (
+                    <div
+                      key={inq.id}
+                      onClick={() => setSelectedInqId(inq.id)}
+                      className="bg-white border border-slate-200 hover:border-blue-400 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer"
+                    >
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded">{inq.refNo}</span>
+                          <span className="text-xs font-semibold bg-slate-100 px-2 py-0.5 rounded">{inq.division}</span>
+                          <span className="text-xs font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded">
+                            Sales: {inq.assignedSalesName} ({inq.commissionPct || 0}% Profit Share)
+                          </span>
+                        </div>
+                        <h3 className="text-base font-bold mt-1">{inq.clientName}</h3>
+                        <p className="text-xs text-slate-500">{inq.contactPerson} • {inq.phone}</p>
+                      </div>
 
-              {selectedInquiry.managerApproved ? (
-                <div className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-100 text-emerald-800 text-xs font-semibold">
-                  <ShieldCheck className="w-4 h-4" />
-                  Approved by {selectedInquiry.approvedBy}
-                </div>
-              ) : (
-                <button
-                  onClick={handleManagerApprove}
-                  className="w-full sm:w-auto px-3.5 py-2.5 sm:py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
-                >
-                  <ShieldCheck className="w-4 h-4" /> Record Sales Manager Approval
-                </button>
-              )}
+                      <div className="flex items-center justify-between sm:justify-end gap-4">
+                        <div className="text-right">
+                          <div className="text-xs text-slate-400">Quote Total (Incl. VAT)</div>
+                          <div className="text-base font-bold">SAR {formatSAR(fin.grandTotalSAR)}</div>
+                        </div>
+                        {inq.stage !== 'won' ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleConvertQuoteToSO(inq);
+                            }}
+                            className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold cursor-pointer"
+                          >
+                            Convert to SO →
+                          </button>
+                        ) : (
+                          <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-bold">
+                            SO Created
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeModule === 'sales_orders' && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-base sm:text-lg font-bold text-slate-900">Sales Orders (SO) &amp; Delivery Execution</h2>
+              <p className="text-xs text-slate-500">Issue Full or Partial Delivery Notes against open Sales Orders, then generate ZATCA Invoices.</p>
             </div>
 
-            {/* Horizontal Scrollable Workspace Tabs */}
-            <div className="px-4 sm:px-5 border-b border-slate-200 flex gap-5 bg-white overflow-x-auto shrink-0">
-              {[
-                { id: 'boq', label: '1. BOQ & SAR Quote' },
-                { id: 'vendors', label: `2. Supplier RFQs (${selectedInquiry.vendorQuotes?.length || 0})` },
-                { id: 'followup', label: `3. Follow-Ups (${selectedInquiry.followUps?.length || 0})` },
-              ].map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => setActiveTab(t.id)}
-                  className={`py-3 text-xs font-semibold border-b-2 whitespace-nowrap transition cursor-pointer ${
-                    activeTab === t.id
-                      ? 'border-blue-600 text-blue-600'
-                      : 'border-transparent text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
+            {salesOrders.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-slate-500">
+                No Sales Orders yet. Convert an approved quote from <strong>1. Quotes &amp; CRM</strong> to create a Sales Order.
+              </div>
+            ) : (
+              <div className="grid gap-4">
+                {salesOrders.map((so) => (
+                  <div key={so.id} className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded">{so.so_number}</span>
+                          <span className="text-xs font-semibold uppercase px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                            {so.status.replace('_', ' ')}
+                          </span>
+                        </div>
+                        <h3 className="text-base font-bold mt-1">{so.client_name}</h3>
+                        <p className="text-xs text-slate-500">
+                          Salesman: <strong>{so.salesman_name}</strong> • Total: <strong>SAR {formatSAR(so.grand_total_sar)}</strong>
+                        </p>
+                      </div>
 
-            {/* Workspace Body */}
-            <div className="p-4 sm:p-6 flex-1 space-y-6 pb-16">
-              {activeTab === 'boq' && (() => {
-                const fin = computeFinancials(selectedInquiry, fxRates);
-                return (
-                  <div className="space-y-5">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-bold text-slate-800">BOQ Line Items (Multi-Currency ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ SAR)</h3>
-                      <button
-                        onClick={handleAddBoqRow}
-                        className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-semibold flex items-center gap-1 cursor-pointer"
-                      >
-                        <Plus className="w-3.5 h-3.5" /> Add Item
-                      </button>
+                      {so.status !== 'delivered' && (
+                        <button
+                          onClick={() => openDeliveryModal(so)}
+                          className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Truck className="w-4 h-4" /> Record Delivery (Full / Partial)
+                        </button>
+                      )}
                     </div>
 
-                    {/* Mobile Stacked BOQ Cards */}
-                    <div className="sm:hidden space-y-3">
-                      {selectedInquiry.boqItems.map((item, idx) => {
-                        const rowSAR = (Number(item.qty) || 0) * (Number(item.buyUnitCost) || 0) * (fxRates[item.buyCurrency] || 1);
-                        return (
-                          <div key={item.id} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50 space-y-2.5">
-                            <div className="flex items-center justify-between">
-                              <span className="text-[11px] font-bold text-slate-500">Item #{idx + 1}</span>
-                              {selectedInquiry.boqItems.length > 1 && (
-                                <button onClick={() => handleRemoveBoqRow(item.id)} className="text-rose-500 p-1">
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                            </div>
-                            <input
-                              type="text"
-                              value={item.desc}
-                              onChange={(e) => handleBoqItemChange(item.id, 'desc', e.target.value)}
-                              className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-2 text-base"
-                              placeholder="Item description"
-                            />
-                            <div className="grid grid-cols-3 gap-2">
-                              <div>
-                                <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Qty</label>
-                                <input
-                                  type="number"
-                                  value={item.qty}
-                                  onChange={(e) => handleBoqItemChange(item.id, 'qty', parseFloat(e.target.value) || 0)}
-                                  className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-base"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Currency</label>
-                                <select
-                                  value={item.buyCurrency}
-                                  onChange={(e) => handleBoqItemChange(item.id, 'buyCurrency', e.target.value)}
-                                  className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-base font-semibold"
-                                >
-                                  {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                                </select>
-                              </div>
-                              <div>
-                                <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Unit Cost</label>
-                                <input
-                                  type="number"
-                                  value={item.buyUnitCost}
-                                  onChange={(e) => handleBoqItemChange(item.id, 'buyUnitCost', parseFloat(e.target.value) || 0)}
-                                  className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-base"
-                                />
-                              </div>
-                            </div>
-                            <div className="flex justify-between items-center pt-1.5 border-t border-slate-200 text-xs">
-                              <span className="text-slate-500">Line Total (SAR):</span>
-                              <span className="font-bold text-slate-900">SAR {formatSAR(rowSAR)}</span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* Desktop BOQ Table */}
-                    <div className="hidden sm:block overflow-x-auto border border-slate-200 rounded-xl">
-                      <table className="w-full text-xs text-left">
-                        <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
+                    <div className="border border-slate-100 rounded-xl overflow-hidden text-xs">
+                      <table className="w-full text-left">
+                        <thead className="bg-slate-50 text-slate-500">
                           <tr>
-                            <th className="p-2.5">Description</th>
-                            <th className="p-2.5 w-16">Qty</th>
-                            <th className="p-2.5 w-24">Buy Curr</th>
-                            <th className="p-2.5 w-28">Unit Cost</th>
-                            <th className="p-2.5 w-28 text-right">Total Cost (SAR)</th>
+                            <th className="p-2">Item</th>
+                            <th className="p-2 text-right">Ordered</th>
+                            <th className="p-2 text-right">Delivered</th>
+                            <th className="p-2 text-right">Pending</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {selectedInquiry.boqItems.map((item) => {
-                            const rowSAR = (Number(item.qty) || 0) * (Number(item.buyUnitCost) || 0) * (fxRates[item.buyCurrency] || 1);
+                          {(so.items || []).map((it) => {
+                            const pending = Math.max(0, Number(it.orderedQty) - Number(it.deliveredQty || 0));
                             return (
-                              <tr key={item.id}>
-                                <td className="p-2">
-                                  <input
-                                    type="text"
-                                    value={item.desc}
-                                    onChange={(e) => handleBoqItemChange(item.id, 'desc', e.target.value)}
-                                    className="w-full border border-slate-200 rounded px-2 py-1"
-                                  />
-                                </td>
-                                <td className="p-2">
-                                  <input
-                                    type="number"
-                                    value={item.qty}
-                                    onChange={(e) => handleBoqItemChange(item.id, 'qty', parseFloat(e.target.value) || 0)}
-                                    className="w-full border border-slate-200 rounded px-2 py-1"
-                                  />
-                                </td>
-                                <td className="p-2">
-                                  <select
-                                    value={item.buyCurrency}
-                                    onChange={(e) => handleBoqItemChange(item.id, 'buyCurrency', e.target.value)}
-                                    className="w-full border border-slate-200 rounded px-1.5 py-1 bg-white font-semibold"
-                                  >
-                                    {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                                  </select>
-                                </td>
-                                <td className="p-2">
-                                  <input
-                                    type="number"
-                                    value={item.buyUnitCost}
-                                    onChange={(e) => handleBoqItemChange(item.id, 'buyUnitCost', parseFloat(e.target.value) || 0)}
-                                    className="w-full border border-slate-200 rounded px-2 py-1"
-                                  />
-                                </td>
-                                <td className="p-2 text-right font-semibold text-slate-800">
-                                  {formatSAR(rowSAR)}
-                                </td>
+                              <tr key={it.id}>
+                                <td className="p-2 font-medium">{it.desc}</td>
+                                <td className="p-2 text-right">{it.orderedQty} {it.unit}</td>
+                                <td className="p-2 text-right text-emerald-600 font-semibold">{it.deliveredQty || 0}</td>
+                                <td className="p-2 text-right text-amber-600 font-semibold">{pending}</td>
                               </tr>
                             );
                           })}
                         </tbody>
                       </table>
                     </div>
+                  </div>
+                ))}
+              </div>
+            )}
 
-                    {/* Margin & KSA VAT Calculation Card */}
-                    <div className="bg-slate-900 text-white rounded-2xl p-4 sm:p-5 grid sm:grid-cols-2 gap-4 sm:gap-6">
-                      <div className="space-y-2">
-                        <label className="block text-xs text-slate-400 font-semibold uppercase">
-                          Target Gross Margin (%)
-                        </label>
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="number"
-                            value={selectedInquiry.marginPercent}
-                            onChange={(e) => updateSelectedField({ marginPercent: parseFloat(e.target.value) || 0 })}
-                            className="w-24 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-base font-bold text-amber-300"
-                          />
-                          <span className="text-xs text-slate-400">
-                            Profit: <strong className="text-emerald-400">SAR {formatSAR(fin.profitSAR)}</strong>
+            {deliveryNotes.length > 0 && (
+              <div className="space-y-3 pt-4 border-t border-slate-200">
+                <h3 className="text-sm font-bold text-slate-800">Issued Delivery Notes (DN)</h3>
+                <div className="grid gap-3">
+                  {deliveryNotes.map((dn) => {
+                    const alreadyInvoiced = invoices.some((inv) => inv.dn_id === dn.id);
+                    return (
+                      <div key={dn.id} className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded">{dn.dn_number}</span>
+                            <span className="text-xs uppercase font-semibold bg-slate-100 px-2 py-0.5 rounded">{dn.delivery_type} Delivery</span>
+                            <span className="text-xs text-slate-500">Ref: {dn.so_number}</span>
+                          </div>
+                          <div className="font-bold text-sm mt-1">{dn.client_name}</div>
+                        </div>
+
+                        {alreadyInvoiced ? (
+                          <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-xl">
+                            ✓ ZATCA Invoice Issued
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => handleGenerateZatcaInvoiceFromDN(dn)}
+                            className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Receipt className="w-4 h-4" /> Issue ZATCA Tax Invoice
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeModule === 'invoices' && (
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-base sm:text-lg font-bold text-slate-900">ZATCA Tax Invoices &amp; Customer Collections</h2>
+              <p className="text-xs text-slate-500">
+                Posted invoices are immutable per ZATCA regulations. Recording customer payments automatically unlocks Salesman Profit Share.
+              </p>
+            </div>
+
+            {invoices.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-slate-500">
+                No ZATCA invoices issued yet. Record a Delivery Note in Module 2 and click <strong>Issue ZATCA Tax Invoice</strong>.
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                {invoices.map((inv) => {
+                  const balanceDue = Math.max(0, Number(inv.grand_total_sar) - Number(inv.paid_amount_sar || 0));
+                  return (
+                    <div key={inv.id} className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded">{inv.invoice_number}</span>
+                          <span className="text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full">
+                            ZATCA {inv.zatca_status === 'cleared' ? 'Phase 2 Cleared' : 'Phase 1 TLV QR'}
+                          </span>
+                          <span className={`text-[11px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                            inv.payment_status === 'paid'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : inv.payment_status === 'partial'
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-rose-100 text-rose-800'
+                          }`}>
+                            {inv.payment_status}
                           </span>
                         </div>
+                        <h3 className="text-base font-bold mt-1">{inv.client_name}</h3>
+                        <p className="text-xs text-slate-500">
+                          Salesman: <strong>{inv.salesman_name}</strong> • Total: <strong>SAR {formatSAR(inv.grand_total_sar)}</strong> • Paid: <strong>SAR {formatSAR(inv.paid_amount_sar)}</strong>
+                        </p>
                       </div>
 
-                      <div className="space-y-1.5 text-xs border-t sm:border-t-0 sm:border-l border-slate-800 pt-3 sm:pt-0 sm:pl-6">
-                        <div className="flex justify-between text-slate-400">
-                          <span>Landed Cost (SAR):</span>
-                          <span>SAR {formatSAR(fin.totalCostSAR)}</span>
-                        </div>
-                        <div className="flex justify-between text-slate-200 font-semibold">
-                          <span>Net Selling (Excl. VAT):</span>
-                          <span>SAR {formatSAR(fin.sellNetSAR)}</span>
-                        </div>
-                        <div className="flex justify-between text-slate-400">
-                          <span>KSA VAT (15%):</span>
-                          <span>SAR {formatSAR(fin.vatSAR)}</span>
-                        </div>
-                        <div className="flex justify-between text-base font-bold text-blue-400 pt-2 border-t border-slate-800">
-                          <span>Customer Total:</span>
-                          <span>SAR {formatSAR(fin.grandTotalSAR)}</span>
-                        </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          onClick={() => setPreviewInvoice(inv)}
+                          className="px-3 py-2 rounded-xl border border-slate-300 hover:bg-slate-50 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <QrCode className="w-4 h-4" /> View ZATCA Invoice
+                        </button>
+                        {balanceDue > 0.01 && (
+                          <button
+                            onClick={() => {
+                              setPaymentModalInv(inv);
+                              setPaymentAmount(balanceDue.toFixed(2));
+                            }}
+                            className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold cursor-pointer"
+                          >
+                            + Receive Payment (SAR {formatSAR(balanceDue)})
+                          </button>
+                        )}
                       </div>
                     </div>
-                  </div>
-                );
-              })()}
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
-              {activeTab === 'vendors' && (
-                <div className="space-y-4">
-                  <form onSubmit={handleAddVendorQuote} className="bg-slate-50 p-3.5 sm:p-4 rounded-xl border border-slate-200 grid sm:grid-cols-4 gap-2.5">
-                    <input
-                      type="text"
-                      required
-                      placeholder="Supplier Name"
-                      value={vqSupplier}
-                      onChange={(e) => setVqSupplier(e.target.value)}
-                      className="border border-slate-300 rounded-lg px-3 py-2 text-base sm:text-xs bg-white"
-                    />
-                    <div className="flex gap-1.5">
-                      <select
-                        value={vqCurrency}
-                        onChange={(e) => setVqCurrency(e.target.value)}
-                        className="border border-slate-300 rounded-lg px-2 py-2 text-base sm:text-xs bg-white font-semibold"
-                      >
-                        {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                      <input
-                        type="number"
-                        required
-                        placeholder="Total Quote"
-                        value={vqAmount}
-                        onChange={(e) => setVqAmount(e.target.value)}
-                        className="w-full border border-slate-300 rounded-lg px-2.5 py-2 text-base sm:text-xs bg-white"
-                      />
-                    </div>
-                    <input
-                      type="text"
-                      placeholder="Lead Time (e.g. 2 Weeks)"
-                      value={vqLeadTime}
-                      onChange={(e) => setVqLeadTime(e.target.value)}
-                      className="border border-slate-300 rounded-lg px-3 py-2 text-base sm:text-xs bg-white"
-                    />
-                    <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold py-2.5 sm:py-2 cursor-pointer">
-                      + Add Vendor Quote
-                    </button>
-                  </form>
+        {activeModule === 'purchase' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base sm:text-lg font-bold text-slate-900">Purchase Full Cycle &amp; Landed Costing</h2>
+                <p className="text-xs text-slate-500">PO Issuance → Goods Receipt Note (GRN) → Supplier Bill &amp; Customs/Freight Allocation.</p>
+              </div>
+              <button
+                onClick={() => setShowNewPOModal(true)}
+                className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" /> New Purchase Order
+              </button>
+            </div>
 
-                  <div className="space-y-2.5">
-                    {(selectedInquiry.vendorQuotes || []).map((vq) => (
-                      <div key={vq.id} className="p-3.5 rounded-xl border border-slate-200 flex items-center justify-between gap-2">
-                        <div>
-                          <div className="font-bold text-sm text-slate-900">{vq.supplier}</div>
-                          <div className="text-xs text-slate-500">Delivery: {vq.leadTime}</div>
+            {purchaseOrders.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-slate-500">
+                No Purchase Orders created yet. Click <strong>New Purchase Order</strong> to issue a supplier PO.
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                {purchaseOrders.map((po) => {
+                  const totalLandedSar = Number(po.goods_total_sar || 0) + Number(po.landed_cost_sar || 0);
+                  return (
+                    <div key={po.id} className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded">{po.po_number}</span>
+                          {po.so_number && <span className="text-xs bg-slate-100 px-2 py-0.5 rounded">Linked: {po.so_number}</span>}
+                          <span className="text-xs font-bold uppercase text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
+                            {po.status.replace('_', ' ')}
+                          </span>
                         </div>
-                        <div className="text-right">
-                          <div className="font-bold text-sm text-slate-900">{vq.currency} {formatSAR(vq.amount)}</div>
-                          <div className="text-xs text-slate-500">
-                            ÃƒÂ¢Ã¢â‚¬Â°Ã‹â€  SAR {formatSAR(vq.amount * (fxRates[vq.currency] || 1))}
-                          </div>
-                        </div>
+                        <h3 className="text-base font-bold mt-1">{po.supplier_name}</h3>
+                        <p className="text-xs text-slate-500">
+                          Goods: <strong>{po.currency} {formatSAR(po.goods_total_fx)}</strong> (SAR {formatSAR(po.goods_total_sar)}) + Freight/Customs: <strong>SAR {formatSAR(po.landed_cost_sar)}</strong> = Total Landed: <strong>SAR {formatSAR(totalLandedSar)}</strong>
+                        </p>
                       </div>
-                    ))}
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        {po.status === 'po_issued' && (
+                          <button
+                            onClick={() => advancePurchaseStage(po, 'grn_completed')}
+                            className="px-3 py-2 rounded-xl bg-indigo-600 text-white text-xs font-semibold cursor-pointer"
+                          >
+                            Record GRN (Goods Received)
+                          </button>
+                        )}
+                        {po.status === 'grn_completed' && (
+                          <button
+                            onClick={() => advancePurchaseStage(po, 'billed', { bill_status: 'posted' })}
+                            className="px-3 py-2 rounded-xl bg-purple-600 text-white text-xs font-semibold cursor-pointer"
+                          >
+                            Post Supplier Bill to Finance
+                          </button>
+                        )}
+                        {po.status === 'billed' && po.bill_status !== 'paid' && (
+                          <button
+                            onClick={() => advancePurchaseStage(po, 'billed', { bill_status: 'paid', paid_sar: totalLandedSar + Number(po.supplier_vat_sar || 0) })}
+                            className="px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-semibold cursor-pointer"
+                          >
+                            Mark Supplier Paid
+                          </button>
+                        )}
+                        {po.bill_status === 'paid' && (
+                          <span className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 text-xs font-bold">
+                            ✓ GRN &amp; Supplier Paid
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeModule === 'profit_share' && (
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-base sm:text-lg font-bold text-slate-900">Sales Profit Share Ledger (Collection-Based)</h2>
+              <p className="text-xs text-slate-500">
+                Calculated strictly on <strong>Net Profit</strong> and unlocked proportionally as <strong>Customer Payments</strong> are collected.
+              </p>
+            </div>
+
+            {commissions.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-slate-500">
+                No profit-share entries yet. Assign a salesman with a Commission % and issue an invoice to track profit share.
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                {commissions.map((c) => (
+                  <div key={c.id} className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-purple-700 bg-purple-50 px-2.5 py-0.5 rounded">{c.salesman_name}</span>
+                        <span className="text-xs font-semibold bg-slate-100 px-2 py-0.5 rounded">Rate: {c.commission_pct}% of Net Profit</span>
+                        <span className={`text-[11px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                          c.status === 'ready_for_payout'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : c.status === 'partially_unlocked'
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-slate-200 text-slate-700'
+                        }`}>
+                          {c.status.replace('_', ' ')}
+                        </span>
+                      </div>
+                      <h3 className="text-base font-bold mt-1">{c.client_name} ({c.invoice_number})</h3>
+                      <p className="text-xs text-slate-500">
+                        Deal Net Profit: <strong>SAR {formatSAR(c.net_profit_sar)}</strong> • Total Eligible Share: <strong>SAR {formatSAR(c.total_eligible_commission_sar)}</strong>
+                      </p>
+                    </div>
+
+                    <div className="text-left sm:text-right bg-slate-50 p-3 rounded-xl border border-slate-200">
+                      <div className="text-[11px] text-slate-500">Unlocked (Collected Cash Basis)</div>
+                      <div className="text-lg font-bold text-emerald-600">SAR {formatSAR(c.unlocked_commission_sar)}</div>
+                    </div>
                   </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeModule === 'settings' && (
+          <div className="grid lg:grid-cols-2 gap-6">
+            <form onSubmit={handleSaveCompanySettings} className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h2 className="text-base font-bold text-slate-900">Company &amp; ZATCA Tax Profile (Editable)</h2>
+              </div>
+
+              {settingsSavedMsg && (
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold">
+                  {settingsSavedMsg}
                 </div>
               )}
 
-              {activeTab === 'followup' && (() => {
-                const fin = computeFinancials(selectedInquiry, fxRates);
-                const waTemplate = `Dear ${selectedInquiry.contactPerson}, greetings from Horizon Business Solutions Est. Following up on our quotation ${selectedInquiry.refNo} for ${selectedInquiry.clientName} (Total: SAR ${formatSAR(fin.grandTotalSAR)} incl. 15% VAT). Kindly let us know if you need any technical clarification or delivery schedule update.`;
-                const waUrl = `https://wa.me/${selectedInquiry.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(waTemplate)}`;
+              <div className="grid sm:grid-cols-2 gap-3 text-xs">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Company Legal Name (English)</label>
+                  <input
+                    type="text"
+                    value={company.nameEn}
+                    onChange={(e) => setCompany({ ...company, nameEn: e.target.value })}
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 text-base sm:text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Company Legal Name (Arabic)</label>
+                  <input
+                    type="text"
+                    dir="rtl"
+                    value={company.nameAr}
+                    onChange={(e) => setCompany({ ...company, nameAr: e.target.value })}
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 text-base sm:text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">15-Digit ZATCA VAT Number</label>
+                  <input
+                    type="text"
+                    maxLength={15}
+                    value={company.vatNumber}
+                    onChange={(e) => setCompany({ ...company, vatNumber: e.target.value })}
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 font-mono text-base sm:text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Commercial Registration (CR)</label>
+                  <input
+                    type="text"
+                    value={company.crNumber}
+                    onChange={(e) => setCompany({ ...company, crNumber: e.target.value })}
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 font-mono text-base sm:text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Address (English)</label>
+                  <input
+                    type="text"
+                    value={company.addressEn}
+                    onChange={(e) => setCompany({ ...company, addressEn: e.target.value })}
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 text-base sm:text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Address (Arabic)</label>
+                  <input
+                    type="text"
+                    dir="rtl"
+                    value={company.addressAr}
+                    onChange={(e) => setCompany({ ...company, addressAr: e.target.value })}
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 text-base sm:text-xs"
+                  />
+                </div>
+              </div>
 
-                return (
-                  <div className="space-y-4">
-                    {/* Direct One-Tap WhatsApp Launch + Template */}
-                    <div className="p-3.5 sm:p-4 rounded-xl bg-emerald-50 border border-emerald-200 space-y-2.5">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="text-xs font-bold text-emerald-900 flex items-center gap-1.5">
-                          <MessageSquare className="w-4 h-4" /> WhatsApp / Email Template
-                        </span>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setFuNote(waTemplate)}
-                            className="px-2.5 py-1 rounded-lg bg-white border border-emerald-300 text-xs font-semibold text-emerald-800 cursor-pointer"
-                          >
-                            Use in Log
-                          </button>
-                          <a
-                            href={waUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-xs font-semibold"
-                          >
-                            Open WhatsApp
-                          </a>
-                        </div>
-                      </div>
-                      <p className="text-xs text-emerald-800 leading-relaxed">{waTemplate}</p>
+              <label className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={company.zatcaPhase2Connected}
+                  onChange={(e) => setCompany({ ...company, zatcaPhase2Connected: e.target.checked })}
+                  className="w-4 h-4"
+                />
+                <span className="font-semibold text-slate-800">
+                  ZATCA Fatoora Phase 2 CSID Active (Enable Real-Time B2B Clearance &amp; Reporting)
+                </span>
+              </label>
+
+              <button
+                type="submit"
+                className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold cursor-pointer"
+              >
+                Save Company Settings
+              </button>
+            </form>
+
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
+              <div className="border-b border-slate-100 pb-3">
+                <h2 className="text-base font-bold text-slate-900">Team Roles &amp; Salesman Profit Share (%)</h2>
+                <p className="text-xs text-slate-500">
+                  Configure which team members are eligible as Salesmen and set their individual Net Profit Share percentage.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                {teamProfiles.map((member) => (
+                  <div key={member.id} className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="font-bold text-sm text-slate-900">{member.full_name}</div>
+                      <div className="text-xs text-slate-500">{member.email} • {member.role_label}</div>
                     </div>
 
-                    {/* Log Follow-Up Form */}
-                    <form onSubmit={handleAddFollowUp} className="flex flex-col sm:flex-row gap-2.5">
-                      <select
-                        value={fuChannel}
-                        onChange={(e) => setFuChannel(e.target.value)}
-                        className="border border-slate-300 rounded-xl px-3 py-2.5 sm:py-2 text-base sm:text-xs font-semibold bg-white"
-                      >
-                        <option value="Phone">Phone Call</option>
-                        <option value="WhatsApp">WhatsApp</option>
-                        <option value="Email">Email</option>
-                        <option value="Meeting">Client Meeting</option>
-                      </select>
-                      <input
-                        type="text"
-                        required
-                        value={fuNote}
-                        onChange={(e) => setFuNote(e.target.value)}
-                        placeholder="Log client response or next follow-up..."
-                        className="flex-1 border border-slate-300 rounded-xl px-3.5 py-2.5 sm:py-2 text-base sm:text-xs"
-                      />
-                      <button
-                        type="submit"
-                        className="px-4 py-2.5 sm:py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
-                      >
-                        <Send className="w-3.5 h-3.5" /> Log Update
-                      </button>
-                    </form>
+                    <div className="flex items-center gap-3">
+                      <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(member.is_salesman)}
+                          onChange={(e) => handleUpdateSalesmanRule(member.id, e.target.checked, member.commission_pct)}
+                        />
+                        Salesman
+                      </label>
 
-                    {/* Timeline */}
-                    <div className="space-y-2.5">
-                      {(selectedInquiry.followUps || []).map((f) => (
-                        <div key={f.id} className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="font-bold text-blue-700">{f.channel} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ {f.by}</span>
-                            <span className="text-[11px] text-slate-400">{new Date(f.at).toLocaleDateString()}</span>
-                          </div>
-                          <p className="text-xs text-slate-700 leading-relaxed">{f.note}</p>
-                        </div>
-                      ))}
+                      <div className="flex items-center gap-1 bg-white border border-slate-300 rounded-lg px-2 py-1">
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          max="100"
+                          defaultValue={member.commission_pct || 0}
+                          onBlur={(e) => handleUpdateSalesmanRule(member.id, member.is_salesman, e.target.value)}
+                          className="w-14 text-right font-bold text-xs focus:outline-none"
+                        />
+                        <span className="text-xs text-slate-400">%</span>
+                      </div>
                     </div>
                   </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* INQUIRY BOQ & MULTI-CURRENCY COSTING DRAWER */}
+      {selectedInq && (
+        <div className="fixed inset-0 bg-slate-950/70 z-40 flex justify-end">
+          <div className="bg-white w-full max-w-3xl h-full overflow-y-auto p-5 sm:p-6 space-y-5 shadow-2xl">
+            <div className="flex items-start justify-between border-b pb-3">
+              <div>
+                <div className="text-xs font-bold text-blue-600">{selectedInq.refNo} • {selectedInq.division}</div>
+                <h3 className="text-lg font-bold">{selectedInq.clientName}</h3>
+                <p className="text-xs text-slate-500">Sales: {selectedInq.assignedSalesName} ({selectedInq.commissionPct || 0}% Profit Share)</p>
+              </div>
+              <button onClick={() => setSelectedInqId(null)} className="p-2 rounded-xl bg-slate-100"><X className="w-5 h-5" /></button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold uppercase text-slate-600">BOQ Multi-Currency Costing (→ SAR)</h4>
+                <button
+                  onClick={() =>
+                    saveInquiryPatch(selectedInq, {
+                      boqItems: [
+                        ...(selectedInq.boqItems || []),
+                        { id: `b-${Date.now()}`, desc: 'New Item', qty: 1, unit: 'Nos', buyCurrency: 'USD', buyUnitCost: 0 },
+                      ],
+                    })
+                  }
+                  className="px-2.5 py-1 rounded-lg bg-slate-900 text-white text-xs font-semibold cursor-pointer"
+                >
+                  + Add Line
+                </button>
+              </div>
+
+              {(selectedInq.boqItems || []).map((item) => (
+                <div key={item.id} className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
+                  <input
+                    type="text"
+                    value={item.desc}
+                    onChange={(e) =>
+                      saveInquiryPatch(selectedInq, {
+                        boqItems: selectedInq.boqItems.map((b) => (b.id === item.id ? { ...b, desc: e.target.value } : b)),
+                      })
+                    }
+                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5"
+                  />
+                  <div className="grid grid-cols-3 gap-2">
+                    <input
+                      type="number"
+                      value={item.qty}
+                      onChange={(e) =>
+                        saveInquiryPatch(selectedInq, {
+                          boqItems: selectedInq.boqItems.map((b) => (b.id === item.id ? { ...b, qty: parseFloat(e.target.value) || 0 } : b)),
+                        })
+                      }
+                      className="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5"
+                      placeholder="Qty"
+                    />
+                    <select
+                      value={item.buyCurrency}
+                      onChange={(e) =>
+                        saveInquiryPatch(selectedInq, {
+                          boqItems: selectedInq.boqItems.map((b) => (b.id === item.id ? { ...b, buyCurrency: e.target.value } : b)),
+                        })
+                      }
+                      className="bg-white border border-slate-300 rounded-lg px-2 py-1.5 font-semibold"
+                    >
+                      {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={item.buyUnitCost}
+                      onChange={(e) =>
+                        saveInquiryPatch(selectedInq, {
+                          boqItems: selectedInq.boqItems.map((b) => (b.id === item.id ? { ...b, buyUnitCost: parseFloat(e.target.value) || 0 } : b)),
+                        })
+                      }
+                      className="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5"
+                      placeholder="Unit Cost"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {(() => {
+              const fin = computeQuoteFinancials(selectedInq, fxRates);
+              return (
+                <div className="bg-slate-900 text-white rounded-2xl p-4 space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span>Gross Margin (%):</span>
+                    <input
+                      type="number"
+                      value={selectedInq.marginPercent}
+                      onChange={(e) => saveInquiryPatch(selectedInq, { marginPercent: parseFloat(e.target.value) || 0 })}
+                      className="w-20 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-right font-bold text-amber-300"
+                    />
+                  </div>
+                  <div className="flex justify-between text-slate-400">
+                    <span>Landed Cost (SAR):</span>
+                    <span>SAR {formatSAR(fin.totalCostSAR)}</span>
+                  </div>
+                  <div className="flex justify-between text-emerald-400 font-semibold">
+                    <span>Net Profit (SAR):</span>
+                    <span>SAR {formatSAR(fin.profitSAR)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm font-bold text-blue-400 pt-2 border-t border-slate-800">
+                    <span>Total Quote (Incl. 15% VAT):</span>
+                    <span>SAR {formatSAR(fin.grandTotalSAR)}</span>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {selectedInq.stage !== 'won' && (
+              <button
+                onClick={() => handleConvertQuoteToSO(selectedInq)}
+                className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold cursor-pointer"
+              >
+                Approve &amp; Convert Quote to Sales Order (SO) →
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: NEW INQUIRY */}
+      {showNewInqModal && (
+        <div className="fixed inset-0 bg-slate-950/70 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl max-w-lg w-full p-5 sm:p-6 space-y-4">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="font-bold text-base">New Client Inquiry</h3>
+              <button onClick={() => setShowNewInqModal(false)}><X className="w-5 h-5" /></button>
+            </div>
+            <form onSubmit={handleCreateInquiry} className="space-y-3 text-xs">
+              <input
+                type="text"
+                required
+                placeholder="Client Company Name *"
+                value={newInq.clientName}
+                onChange={(e) => setNewInq({ ...newInq, clientName: e.target.value })}
+                className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-base sm:text-xs"
+              />
+              <input
+                type="text"
+                maxLength={15}
+                placeholder="Client 15-Digit VAT No (Optional - B2B)"
+                value={newInq.clientVat}
+                onChange={(e) => setNewInq({ ...newInq, clientVat: e.target.value })}
+                className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-base sm:text-xs font-mono"
+              />
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  type="text"
+                  required
+                  placeholder="Contact Person *"
+                  value={newInq.contactPerson}
+                  onChange={(e) => setNewInq({ ...newInq, contactPerson: e.target.value })}
+                  className="border border-slate-300 rounded-xl px-3 py-2.5 text-base sm:text-xs"
+                />
+                <input
+                  type="tel"
+                  required
+                  placeholder="Phone / WhatsApp *"
+                  value={newInq.phone}
+                  onChange={(e) => setNewInq({ ...newInq, phone: e.target.value })}
+                  className="border border-slate-300 rounded-xl px-3 py-2.5 text-base sm:text-xs"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <select
+                  value={newInq.division}
+                  onChange={(e) => setNewInq({ ...newInq, division: e.target.value })}
+                  className="border border-slate-300 rounded-xl px-3 py-2.5 bg-white text-base sm:text-xs"
+                >
+                  <option value="MEP">MEP Trading</option>
+                  <option value="IT & ELV">IT &amp; ELV</option>
+                </select>
+                <select
+                  required
+                  value={newInq.salesmanId}
+                  onChange={(e) => setNewInq({ ...newInq, salesmanId: e.target.value })}
+                  className="border border-slate-300 rounded-xl px-3 py-2.5 bg-white text-base sm:text-xs"
+                >
+                  <option value="">Assign Salesman Manually...</option>
+                  {salesmenList.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.full_name} ({s.commission_pct || 0}% Share)
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <input
+                type="text"
+                required
+                placeholder="Primary Item / Scope *"
+                value={newInq.firstItemDesc}
+                onChange={(e) => setNewInq({ ...newInq, firstItemDesc: e.target.value })}
+                className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-base sm:text-xs"
+              />
+              <button type="submit" className="w-full py-3 rounded-xl bg-blue-600 text-white font-semibold cursor-pointer">
+                Save Inquiry
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: FULL OR PARTIAL DELIVERY NOTE */}
+      {deliveryModalSO && (
+        <div className="fixed inset-0 bg-slate-950/70 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl max-w-lg w-full p-5 sm:p-6 space-y-4">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="font-bold text-base">Record Delivery — {deliveryModalSO.so_number}</h3>
+              <button onClick={() => setDeliveryModalSO(null)}><X className="w-5 h-5" /></button>
+            </div>
+            <form onSubmit={handleRecordDelivery} className="space-y-3 text-xs">
+              {(deliveryModalSO.items || []).map((it) => {
+                const remaining = Math.max(0, Number(it.orderedQty) - Number(it.deliveredQty || 0));
+                return (
+                  <div key={it.id} className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-3">
+                    <div>
+                      <div className="font-bold">{it.desc}</div>
+                      <div className="text-slate-500">Ordered: {it.orderedQty} • Pending: {remaining}</div>
+                    </div>
+                    <input
+                      type="number"
+                      min="0"
+                      max={remaining}
+                      value={deliveryQtys[it.id] ?? remaining}
+                      onChange={(e) => setDeliveryQtys({ ...deliveryQtys, [it.id]: e.target.value })}
+                      className="w-20 border border-slate-300 rounded-lg px-2.5 py-1.5 text-right font-bold bg-white"
+                    />
+                  </div>
                 );
-              })()}
+              })}
+              <input
+                type="text"
+                placeholder="Driver / Waybill / Site Receiver Notes"
+                value={deliveryNotesText}
+                onChange={(e) => setDeliveryNotesText(e.target.value)}
+                className="w-full border border-slate-300 rounded-xl px-3 py-2.5"
+              />
+              <button type="submit" className="w-full py-3 rounded-xl bg-blue-600 text-white font-semibold cursor-pointer">
+                Confirm &amp; Issue Delivery Note
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ZATCA BILINGUAL INVOICE PREVIEW */}
+      {previewInvoice && (
+        <div className="fixed inset-0 bg-slate-950/75 z-50 flex items-center justify-center p-3 sm:p-6">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b pb-3">
+              <span className="font-bold text-base">ZATCA Tax Invoice • فاتورة ضريبية</span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => window.print()}
+                  className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" /> Print / PDF
+                </button>
+                <button onClick={() => setPreviewInvoice(null)}><X className="w-5 h-5" /></button>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-start gap-4 border-b pb-4">
+              <div className="space-y-1 text-xs">
+                <div className="text-lg font-bold text-slate-900">{company.nameEn}</div>
+                <div className="text-sm font-bold text-blue-700">{company.nameAr}</div>
+                <div className="text-slate-600">{company.addressEn} | {company.addressAr}</div>
+                <div className="font-mono font-semibold">VAT Reg / الرقم الضريبي: {company.vatNumber}</div>
+                <div className="font-mono">CR / السجل التجاري: {company.crNumber}</div>
+              </div>
+
+              <div className="text-center shrink-0">
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(previewInvoice.qr_base64)}`}
+                  alt="ZATCA TLV QR Code"
+                  className="w-28 h-28 border border-slate-200 rounded-lg p-1 mx-auto"
+                />
+                <div className="text-[10px] text-slate-500 mt-1 font-mono">ZATCA TLV QR</div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-xs bg-slate-50 p-3.5 rounded-xl">
+              <div>
+                <div className="text-slate-400">Invoice No / رقم الفاتورة</div>
+                <div className="font-bold">{previewInvoice.invoice_number}</div>
+              </div>
+              <div>
+                <div className="text-slate-400">Issue Date / التاريخ</div>
+                <div className="font-bold">{new Date(previewInvoice.issued_at).toLocaleString()}</div>
+              </div>
+              <div>
+                <div className="text-slate-400">Customer / العميل</div>
+                <div className="font-bold">{previewInvoice.client_name}</div>
+              </div>
+              <div>
+                <div className="text-slate-400">ZATCA UUID</div>
+                <div className="font-mono text-[10px] truncate">{previewInvoice.zatca_uuid}</div>
+              </div>
+            </div>
+
+            <table className="w-full text-xs border border-slate-200">
+              <thead className="bg-slate-100">
+                <tr>
+                  <th className="p-2 text-left">Description / البيان</th>
+                  <th className="p-2 text-right">Qty / الكمية</th>
+                  <th className="p-2 text-right">Unit Price / السعر</th>
+                  <th className="p-2 text-right">Total / الإجمالي</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {(previewInvoice.items || []).map((it, idx) => (
+                  <tr key={idx}>
+                    <td className="p-2">{it.desc}</td>
+                    <td className="p-2 text-right">{it.qty}</td>
+                    <td className="p-2 text-right">{formatSAR(it.unitSellSar)}</td>
+                    <td className="p-2 text-right font-semibold">{formatSAR(Number(it.qty) * Number(it.unitSellSar))}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <div className="ml-auto max-w-xs space-y-1 text-xs">
+              <div className="flex justify-between">
+                <span>Subtotal (Excl. VAT) / المجموع الفرعي:</span>
+                <span className="font-semibold">SAR {formatSAR(previewInvoice.subtotal_sar)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>VAT (15%) / ضريبة القيمة المضافة:</span>
+                <span className="font-semibold">SAR {formatSAR(previewInvoice.vat_sar)}</span>
+              </div>
+              <div className="flex justify-between text-sm font-bold text-blue-700 pt-1.5 border-t">
+                <span>Total Incl. VAT / الإجمالي شامل الضريبة:</span>
+                <span>SAR {formatSAR(previewInvoice.grand_total_sar)}</span>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* ==================================================================== */}
-      {/* NEW INQUIRY MODAL (MOBILE FRIENDLY)                                  */}
-      {/* ==================================================================== */}
-      {showNewModal && (
-        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-base font-bold text-slate-900">Log New Client Inquiry</h3>
-              <button onClick={() => setShowNewModal(false)} className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer">
-                <X className="w-5 h-5" />
-              </button>
+      {/* MODAL: CUSTOMER PAYMENT RECEIPT */}
+      {paymentModalInv && (
+        <div className="fixed inset-0 bg-slate-950/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="font-bold text-base">Receive Customer Payment — {paymentModalInv.invoice_number}</h3>
+              <button onClick={() => setPaymentModalInv(null)}><X className="w-5 h-5" /></button>
             </div>
-
-            <form onSubmit={handleCreateInquiry} className="space-y-3 text-xs">
+            <form onSubmit={handleRecordCustomerPayment} className="space-y-3 text-xs">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Client / Company Name *</label>
+                <label className="block font-semibold mb-1">Amount Received (SAR) *</label>
                 <input
-                  type="text"
+                  type="number"
+                  step="0.01"
                   required
-                  value={newInq.clientName}
-                  onChange={(e) => setNewInq({ ...newInq, clientName: e.target.value })}
-                  placeholder="e.g. Saudi Arabian Contracting Co."
-                  className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-base sm:text-xs"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-base font-bold"
                 />
               </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Contact Person *</label>
-                  <input
-                    type="text"
-                    required
-                    value={newInq.contactPerson}
-                    onChange={(e) => setNewInq({ ...newInq, contactPerson: e.target.value })}
-                    placeholder="Eng. Name"
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-base sm:text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Phone / WhatsApp *</label>
-                  <input
-                    type="tel"
-                    required
-                    value={newInq.phone}
-                    onChange={(e) => setNewInq({ ...newInq, phone: e.target.value })}
-                    placeholder="+966 5X XXX XXXX"
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-base sm:text-xs"
-                  />
-                </div>
-              </div>
-
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Division</label>
-                  <select
-                    value={newInq.division}
-                    onChange={(e) =>
-                      setNewInq({
-                        ...newInq,
-                        division: e.target.value,
-                        assignedSalesKey: e.target.value === 'MEP' ? 'sales_mep' : 'sales_it',
-                      })
-                    }
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-base sm:text-xs bg-white"
-                  >
-                    <option value="MEP">MEP Trading</option>
-                    <option value="IT & ELV">IT &amp; ELV Services</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Assigned Salesman</label>
-                  <select
-                    value={newInq.assignedSalesKey}
-                    onChange={(e) => setNewInq({ ...newInq, assignedSalesKey: e.target.value })}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-base sm:text-xs bg-white"
-                  >
-                    <option value="sales_mep">Salesman 1 (MEP)</option>
-                    <option value="sales_it">Salesman 2 (IT)</option>
-                  </select>
-                </div>
+                <select
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  className="border border-slate-300 rounded-xl px-3 py-2.5 bg-white"
+                >
+                  <option value="Bank Transfer">Bank Transfer (SAR)</option>
+                  <option value="Mada / POS">Mada / POS</option>
+                  <option value="Cheque">Cheque</option>
+                  <option value="Cash">Cash</option>
+                </select>
+                <input
+                  type="text"
+                  placeholder="Bank Ref / Transfer ID"
+                  value={paymentRef}
+                  onChange={(e) => setPaymentRef(e.target.value)}
+                  className="border border-slate-300 rounded-xl px-3 py-2.5"
+                />
               </div>
+              <button type="submit" className="w-full py-3 rounded-xl bg-emerald-600 text-white font-semibold cursor-pointer">
+                Post Receipt &amp; Unlock Sales Profit Share
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
 
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Primary Requested Item / Scope *</label>
+      {/* MODAL: NEW PURCHASE ORDER */}
+      {showNewPOModal && (
+        <div className="fixed inset-0 bg-slate-950/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="font-bold text-base">Create Purchase Order (PO)</h3>
+              <button onClick={() => setShowNewPOModal(false)}><X className="w-5 h-5" /></button>
+            </div>
+            <form onSubmit={handleCreatePO} className="space-y-3 text-xs">
+              <select
+                value={newPO.soId}
+                onChange={(e) => setNewPO({ ...newPO, soId: e.target.value })}
+                className="w-full border border-slate-300 rounded-xl px-3 py-2.5 bg-white"
+              >
+                <option value="">Link to Sales Order (Optional - Back-to-Back)</option>
+                {salesOrders.map((s) => (
+                  <option key={s.id} value={s.id}>{s.so_number} — {s.client_name}</option>
+                ))}
+              </select>
+              <div className="grid grid-cols-2 gap-3">
                 <input
                   type="text"
                   required
-                  value={newInq.firstItemDesc}
-                  onChange={(e) => setNewInq({ ...newInq, firstItemDesc: e.target.value })}
-                  placeholder="e.g. HVAC Chilled Water Pumps / Core Switches"
-                  className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-base sm:text-xs"
+                  placeholder="Supplier Name *"
+                  value={newPO.supplierName}
+                  onChange={(e) => setNewPO({ ...newPO, supplierName: e.target.value })}
+                  className="border border-slate-300 rounded-xl px-3 py-2.5"
+                />
+                <input
+                  type="text"
+                  placeholder="Supplier VAT No (if KSA)"
+                  value={newPO.supplierVat}
+                  onChange={(e) => setNewPO({ ...newPO, supplierVat: e.target.value })}
+                  className="border border-slate-300 rounded-xl px-3 py-2.5"
                 />
               </div>
-
-              <div className="pt-2 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowNewModal(false)}
-                  className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-semibold cursor-pointer"
+              <input
+                type="text"
+                required
+                placeholder="Item Description *"
+                value={newPO.itemDesc}
+                onChange={(e) => setNewPO({ ...newPO, itemDesc: e.target.value })}
+                className="w-full border border-slate-300 rounded-xl px-3 py-2.5"
+              />
+              <div className="grid grid-cols-3 gap-2">
+                <input
+                  type="number"
+                  required
+                  placeholder="Qty"
+                  value={newPO.itemQty}
+                  onChange={(e) => setNewPO({ ...newPO, itemQty: e.target.value })}
+                  className="border border-slate-300 rounded-xl px-3 py-2.5"
+                />
+                <select
+                  value={newPO.currency}
+                  onChange={(e) => setNewPO({ ...newPO, currency: e.target.value, fxRate: fxRates[e.target.value] || 1 })}
+                  className="border border-slate-300 rounded-xl px-3 py-2.5 bg-white font-semibold"
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold cursor-pointer"
-                >
-                  Save &amp; Sync
-                </button>
+                  {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  placeholder="Unit Cost (FX)"
+                  value={newPO.unitCostFx}
+                  onChange={(e) => setNewPO({ ...newPO, unitCostFx: e.target.value })}
+                  className="border border-slate-300 rounded-xl px-3 py-2.5"
+                />
               </div>
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Estimated Freight / Customs / Clearance (SAR)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={newPO.landedCostSar}
+                  onChange={(e) => setNewPO({ ...newPO, landedCostSar: e.target.value })}
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2.5"
+                />
+              </div>
+              <button type="submit" className="w-full py-3 rounded-xl bg-blue-600 text-white font-semibold cursor-pointer">
+                Issue Purchase Order
+              </button>
             </form>
           </div>
         </div>
