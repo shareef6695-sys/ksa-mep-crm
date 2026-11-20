@@ -291,8 +291,7 @@ export function CreditNotesView({
       {previewCN && (
         <div className="fixed inset-0 bg-slate-950/75 z-50 flex items-center justify-center p-3 sm:p-6">
           <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b pb-3">
-              <span className="font-bold text-base text-rose-700">ZATCA Tax Credit Note • إشعار دائن ضريبي</span>
+            <div className="no-print flex items-center justify-between border-b pb-3"><span className="font-bold text-base text-rose-700">ZATCA Tax Credit Note • إشعار دائن ضريبي</span>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => window.print()}

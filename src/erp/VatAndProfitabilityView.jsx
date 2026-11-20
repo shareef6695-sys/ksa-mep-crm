@@ -67,10 +67,7 @@ export function ZatcaVatReturnView({ company, invoices, creditNotes, purchaseOrd
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-base sm:text-lg font-bold text-slate-900">
-            ZATCA Quarterly VAT Return Worksheet • إقرار ضريبة القيمة المضافة
+      <div className="no-print flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-base sm:text-lg font-bold text-slate-900">ZATCA Quarterly VAT Return Worksheet • إقرار ضريبة القيمة المضافة
           </h2>
           <p className="text-xs text-slate-500">
             Reconciles 15% Standard Output VAT, ZATCA Credit Note Adjustments, and Recoverable Input VAT for Fatoora / ZATCA filing.

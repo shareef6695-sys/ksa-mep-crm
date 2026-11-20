@@ -204,8 +204,7 @@ export function FinancialStatementsView({ company, glAccounts, glEntries }) {
 
   return (
     <div className="space-y-4">
-      {/* Header & Controls */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      {/* Header & Controls */}<div className="no-print flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-base sm:text-lg font-bold text-slate-900">
             SOCPA Financial Statements • القوائم المالية
@@ -245,8 +244,7 @@ export function FinancialStatementsView({ company, glAccounts, glEntries }) {
         </div>
       </div>
 
-      {/* Period Filter Strip */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+      {/* Period Filter Strip */}<div className="no-print bg-white border border-slate-200 rounded-2xl p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs">
         <label className="inline-flex items-center gap-2 font-semibold text-slate-800 cursor-pointer">
           <input
             type="checkbox"

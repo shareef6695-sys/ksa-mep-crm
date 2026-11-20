@@ -1,1 +1,89 @@
 @import "tailwindcss";
+
+/* === KSA-APP A4 PRINT ENGINE === */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    font-size: 11pt !important;
+  }
+
+  /* Hide Sidebar, Top Header, Navigation & Interactive Toolbars */
+  aside,
+  nav,
+  header,
+  .no-print,
+  button,
+  select {
+    display: none !important;
+  }
+
+  /* Remove sidebar left margin / flex shell constraints */
+  main,
+  #root,
+  #root > div {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+  }
+
+  /* Flatten ZATCA Invoice & Credit Note Preview Modals onto full A4 Sheet */
+  .fixed.inset-0 {
+    position: static !important;
+    inset: auto !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+    display: block !important;
+    overflow: visible !important;
+  }
+
+  .fixed.inset-0 > div {
+    max-width: 100% !important;
+    width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Clean Borders & Page-Break Protection for Financial Tables */
+  .rounded-2xl,
+  .shadow-sm,
+  .shadow-2xl {
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    page-break-inside: auto !important;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+    page-break-after: auto !important;
+  }
+
+  thead {
+    display: table-header-group !important;
+  }
+
+  img {
+    page-break-inside: avoid !important;
+  }
+}
