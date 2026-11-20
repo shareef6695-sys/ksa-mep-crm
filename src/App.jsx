@@ -774,6 +774,7 @@ export default function App() {
     const newSO = {
       id: `so-${Date.now()}`,
       so_number: soNum,
+      division: inq.division || 'MEP',
       inquiry_id: inq.id,
       client_name: inq.clientName,
       client_vat: inq.clientVat || '',
@@ -844,6 +845,7 @@ export default function App() {
     await supabase.from('delivery_notes').insert({
       id: `dn-${Date.now()}`,
       dn_number: dnNum,
+      division: so.division || 'MEP',
       so_id: deliveryModalSO.id,
       so_number: deliveryModalSO.so_number,
       client_name: deliveryModalSO.client_name,
@@ -887,6 +889,7 @@ export default function App() {
     const newInv = {
       id: `inv-${Date.now()}`,
       invoice_number: invNum,
+      division: dn.division || 'MEP',
       invoice_type: parentSO?.client_vat ? 'standard' : 'simplified',
       so_id: dn.so_id,
       so_number: dn.so_number,
@@ -920,6 +923,7 @@ export default function App() {
         id: `comm-${Date.now()}`,
         invoice_id: insertedInv?.id || newInv.id,
         invoice_number: invNum,
+      division: dn.division || 'MEP',
         client_name: dn.client_name,
         salesman_id: parentSO?.salesman_id || null,
         salesman_name: parentSO?.salesman_name || 'Salesman',
@@ -1400,7 +1404,7 @@ export default function App() {
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded">{so.so_number}</span>
+                            <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded">{so.so_number} <span className={ml-1.5 text-[10px] px-1.5 py-0.5 rounded font-bold }>{so.division || 'MEP'}</span></span>
                             <span className="text-xs font-semibold uppercase px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
                               {so.status.replace('_', ' ')}
                             </span>
@@ -1522,7 +1526,7 @@ export default function App() {
                       <div key={inv.id} className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div>
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded">{inv.invoice_number}</span>
+                            <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded">{inv.invoice_number} <span className={ml-1.5 text-[10px] px-1.5 py-0.5 rounded font-bold }>{inv.division || 'MEP'}</span></span>
                             <span className="text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full">
                               ZATCA {inv.zatca_status === 'cleared' ? 'Phase 2 Cleared' : 'Phase 1 TLV QR'}
                             </span>
