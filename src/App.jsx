@@ -1405,7 +1405,7 @@ export default function App() {
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded">{so.so_number} <span className={ml-1.5 text-[10px] px-1.5 py-0.5 rounded font-bold }>{so.division || 'MEP'}</span> <div className="mt-1"><ShareDocumentButtons company={company} customers={customers} docType="Sales Order" docNumber={so.so_number} clientName={so.client_name} division={so.division} totalSar={so.grand_total_sar} status={so.status} compact /></div></span>
+                            <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded">{so.so_number} <span className={ml-1.5 text-[10px] px-1.5 py-0.5 rounded font-bold }>{so.division || 'MEP'}</span> <div className="mt-1"><button type="button" onClick={(e) => { e.stopPropagation(); setPreviewSO(so); }} className="no-print px-2 py-1 text-[11px] rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-semibold inline-flex items-center gap-1 cursor-pointer transition mr-1"><span>Preview A4 SO</span></button><ShareDocumentButtons company={company} customers={customers} docType="Sales Order" docNumber={so.so_number} clientName={so.client_name} division={so.division} totalSar={so.grand_total_sar} status={so.status} compact /></div></span>
                             <span className="text-xs font-semibold uppercase px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
                               {so.status.replace('_', ' ')}
                             </span>

@@ -458,3 +458,255 @@ export function DeliveryNotePreviewModal({ company, customers = [], dn, onClose 
     </div>
   );
 }
+
+export function SalesOrderPreviewModal({ company, customers = [], so, onClose }) {
+  if (!so) return null;
+
+  const clientName = so.client_name || so.clientName || 'Valued Client';
+  const matchedCustomer = customers.find(
+    (c) =>
+      String(c.name_en || c.name || '')
+        .trim()
+        .toLowerCase() === String(clientName).trim().toLowerCase()
+  );
+
+  const soNumber = so.so_number || 'SO-DRAFT';
+  const division = so.division || 'MEP';
+  const items = Array.isArray(so.items) ? so.items : [];
+
+  const computedSubtotal = items.reduce((sum, it) => {
+    const qty = Number(it.qty) || 0;
+    const sell = Number(it.unitSellSar ?? it.sellingPrice ?? it.unit_price ?? it.price ?? 0);
+    return sum + qty * sell;
+  }, 0);
+
+  const subtotalSar = Number(so.subtotal_sar || computedSubtotal || 0);
+  const vatSar = Number(so.vat_sar ?? (subtotalSar * 0.15).toFixed(2));
+  const grandTotalSar = Number(so.grand_total_sar || (subtotalSar + vatSar).toFixed(2));
+
+  const orderDate = so.created_at
+    ? new Date(so.created_at).toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      })
+    : new Date().toLocaleDateString('en-GB');
+
+  return (
+    <div className="fixed inset-0 bg-slate-950/75 z-50 flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl max-w-4xl w-full shadow-2xl border border-slate-200 overflow-hidden my-auto">
+        {/* Interactive Action Header (Hidden during A4 Print) */}
+        <div className="no-print bg-slate-900 text-white px-5 py-3.5 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-xs font-bold">
+            <FileText className="w-4 h-4 text-blue-400" />
+            <span>Sales Order Confirmation A4 Preview — {soNumber}</span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <ShareDocumentButtons
+              company={company}
+              customers={customers}
+              docType="Sales Order"
+              docNumber={soNumber}
+              clientName={clientName}
+              division={division}
+              totalSar={grandTotalSar}
+              status={so.status || 'Confirmed'}
+            />
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer transition"
+            >
+              <Printer className="w-4 h-4" />
+              <span>Print / Save A4 PDF</span>
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              title="Close Preview"
+              className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Printable A4 Sales Order Document Body */}
+        <div className="p-6 sm:p-8 space-y-6 text-xs text-slate-800 bg-white">
+          <div className="flex flex-wrap justify-between items-start gap-4 border-b-2 border-slate-900 pb-5">
+            <div>
+              {company?.logoUrl && (
+                <img src={company.logoUrl} alt="Company Logo" className="h-14 max-w-[180px] object-contain mb-2" />
+              )}
+              <div className="text-lg font-extrabold text-slate-900">{company?.nameEn || 'KSA MEP & IT Trading Co.'}</div>
+              <div className="text-sm font-bold text-blue-800 mt-0.5">
+                {company?.nameAr || 'شركة التجارة والمقاولات الكهروميكانيكية وتقنية المعلومات'}
+              </div>
+              <div className="text-[11px] text-slate-600 mt-1.5 space-y-0.5">
+                <div>{company?.address || 'Jeddah, Kingdom of Saudi Arabia'}</div>
+                <div className="font-mono">
+                  VAT TIN: <strong>{company?.vatNumber || '300000000000003'}</strong> • CR:{' '}
+                  <strong>{company?.crNumber || '4030000000'}</strong>
+                </div>
+                {company?.phone && (
+                  <div>
+                    Tel: {company.phone} {company?.email ? `• ${company.email}` : ''}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="text-left sm:text-right">
+              <div className="inline-block px-3 py-1 rounded bg-slate-900 text-white font-extrabold text-sm tracking-wide uppercase">
+                SALES ORDER CONFIRMATION • أمر بيع مؤكد
+              </div>
+              <div className="mt-2 space-y-1 font-mono text-xs">
+                <div>
+                  <span className="text-slate-500 font-sans">Sales Order #: </span>
+                  <strong className="text-sm text-blue-800">{soNumber}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-500 font-sans">Order Date: </span>
+                  <strong>{orderDate}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-500 font-sans">Division: </span>
+                  <strong>{division}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-500 font-sans">Status: </span>
+                  <strong className="uppercase">{so.status || 'CONFIRMED'}</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Customer & Order Reference Details */}
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-1">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                <Building2 className="w-3.5 h-3.5 text-blue-700" /> Customer Details • بيانات العميل
+              </div>
+              <div className="text-sm font-bold text-slate-900 pt-0.5">{clientName}</div>
+              {matchedCustomer?.name_ar && <div className="text-xs text-slate-600">{matchedCustomer.name_ar}</div>}
+              {matchedCustomer?.vat_number && (
+                <div className="font-mono text-[11px] text-slate-600">Client VAT TIN: {matchedCustomer.vat_number}</div>
+              )}
+              {(matchedCustomer?.address || matchedCustomer?.city) && (
+                <div className="text-[11px] text-slate-600">
+                  {[matchedCustomer.address, matchedCustomer.city].filter(Boolean).join(', ')}
+                </div>
+              )}
+              {(matchedCustomer?.phone || matchedCustomer?.email) && (
+                <div className="text-[11px] text-slate-600 pt-0.5">
+                  {matchedCustomer.phone || ''} {matchedCustomer.email ? `• ${matchedCustomer.email}` : ''}
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-1">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                Fulfillment &amp; Commercial Terms • شروط التنفيذ والدفع
+              </div>
+              <div className="text-[11px] text-slate-600 pt-0.5">
+                Customer PO Ref: <strong className="font-mono">{so.customer_po || so.clientPo || 'Confirmed Order'}</strong>
+              </div>
+              <div className="text-[11px] text-slate-600">
+                Quote / Inquiry Ref: <strong className="font-mono">{so.quote_number || so.inquiry_id || '—'}</strong>
+              </div>
+              <div className="text-[11px] text-slate-600">
+                Sales Representative: <strong>{so.salesman_name || so.salesman || 'Sales Team'}</strong>
+              </div>
+              <div className="text-[11px] text-slate-600">
+                Payment Terms: <strong>{so.payment_terms || matchedCustomer?.payment_terms || 'As per agreement'}</strong>
+              </div>
+            </div>
+          </div>
+
+          {/* Confirmed Order Line Items */}
+          <div className="border border-slate-200 rounded-xl overflow-hidden">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-900 text-white">
+                <tr>
+                  <th className="p-3 w-10">#</th>
+                  <th className="p-3">Item / Service Description • البيان</th>
+                  <th className="p-3 text-center">UOM</th>
+                  <th className="p-3 text-right">Ordered Qty</th>
+                  <th className="p-3 text-right">Unit Price (SAR)</th>
+                  <th className="p-3 text-right">Line Total (SAR)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {items.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-4 text-center text-slate-500">
+                      Confirmed Sales Order ({soNumber})
+                    </td>
+                  </tr>
+                ) : (
+                  items.map((item, idx) => {
+                    const qty = Number(item.qty) || 0;
+                    const unitSar = Number(item.unitSellSar ?? item.sellingPrice ?? item.unit_price ?? item.price ?? 0);
+                    return (
+                      <tr key={idx}>
+                        <td className="p-3 font-mono text-slate-500">{idx + 1}</td>
+                        <td className="p-3 font-semibold text-slate-900">{item.desc || item.name || 'Ordered Material / Service'}</td>
+                        <td className="p-3 text-center text-slate-600">{item.unit || item.uom || 'PCS'}</td>
+                        <td className="p-3 text-right font-mono font-bold">{qty}</td>
+                        <td className="p-3 text-right font-mono">{formatSAR(unitSar)}</td>
+                        <td className="p-3 text-right font-mono font-bold text-slate-900">
+                          {formatSAR(qty * unitSar)}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Totals & KSA 15% VAT Summary */}
+          <div className="flex flex-col sm:flex-row justify-between items-start gap-6">
+            <div className="text-[11px] text-slate-500 max-w-md space-y-1">
+              <div className="font-bold text-slate-700">Order Confirmation Notes:</div>
+              <p>1. Material allocation and procurement have been initiated against <strong>{soNumber}</strong>.</p>
+              <p>2. A ZATCA Phase 1/2 Tax Invoice with TLV QR code will be issued upon delivery milestone completion.</p>
+            </div>
+
+            <div className="w-full sm:w-80 border border-slate-200 rounded-xl overflow-hidden text-xs">
+              <div className="flex justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-200">
+                <span className="text-slate-600">Order Subtotal (Excl. VAT):</span>
+                <span className="font-mono font-bold">SAR {formatSAR(subtotalSar)}</span>
+              </div>
+              <div className="flex justify-between px-4 py-2.5 border-b border-slate-200">
+                <span className="text-slate-600">KSA VAT (15%):</span>
+                <span className="font-mono font-semibold">SAR {formatSAR(vatSar)}</span>
+              </div>
+              <div className="flex justify-between px-4 py-3 bg-slate-900 text-white font-bold text-sm">
+                <span>Grand Total (SAR):</span>
+                <span className="font-mono text-emerald-400">SAR {formatSAR(grandTotalSar)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Sign-Off Block */}
+          <div className="grid grid-cols-3 gap-6 pt-8 border-t border-slate-200 text-center text-[11px] text-slate-600">
+            <div>
+              <div className="border-b border-dashed border-slate-400 h-8 mb-1.5" />
+              <div className="font-bold text-slate-800">Prepared By (Sales)</div>
+            </div>
+            <div>
+              <div className="border-b border-dashed border-slate-400 h-8 mb-1.5" />
+              <div className="font-bold text-slate-800">Operations / Division Approval</div>
+            </div>
+            <div>
+              <div className="border-b border-dashed border-slate-400 h-8 mb-1.5" />
+              <div className="font-bold text-slate-800">Client Order Acknowledgment</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
