@@ -72,7 +72,7 @@ export function PurchaseOrderPreviewModal({ company, suppliers = [], po, onClose
           {/* Corporate Letterhead */}
           <div className="flex flex-wrap justify-between items-start gap-4 border-b-2 border-slate-900 pb-5">
             <div>
-              <div className="text-lg font-extrabold text-slate-900">{company?.nameEn || 'KSA MEP & IT Trading Co.'}</div>
+              {company?.logoUrl && (<img src={company.logoUrl} alt="Company Logo" className="h-14 max-w-[180px] object-contain mb-2" />)}`n              <div className="text-lg font-extrabold text-slate-900">{company?.nameEn || 'KSA MEP & IT Trading Co.'}</div>
               <div className="text-sm font-bold text-blue-800 mt-0.5">{company?.nameAr || 'شركة التجارة والمقاولات الكهروميكانيكية وتقنية المعلومات'}</div>
               <div className="text-[11px] text-slate-600 mt-1.5 space-y-0.5">
                 <div>{company?.address || 'Jeddah, Kingdom of Saudi Arabia'}</div>

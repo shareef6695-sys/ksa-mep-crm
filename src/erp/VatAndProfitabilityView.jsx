@@ -99,8 +99,8 @@ export function ZatcaVatReturnView({ company, invoices, creditNotes, purchaseOrd
       <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
         <div className="bg-slate-900 text-white px-5 py-3.5 flex flex-wrap justify-between items-center gap-2 text-xs">
           <div>
-            <span className="font-bold">{company.nameEn}</span> • VAT TIN: <span className="font-mono">{company.vatNumber}</span>
-          </div>
+            <div className="flex items-center gap-3">{company?.logoUrl && (<img src={company.logoUrl} alt="Company Logo" className="h-9 max-w-[130px] object-contain bg-white rounded p-0.5" />)}<div><span className="font-bold">{company.nameEn}</span> • VAT TIN: <span className="font-mono">{company.vatNumber}</span>
+          </div></div>
           <span className="px-2.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-semibold">
             Period: {selectedPeriod === 'ALL' ? 'Cumulative All Quarters' : selectedPeriod}
           </span>

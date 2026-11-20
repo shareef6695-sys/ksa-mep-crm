@@ -304,7 +304,7 @@ export function CreditNotesView({
 
             <div className="flex justify-between items-start gap-4 border-b pb-4">
               <div className="space-y-1 text-xs">
-                <div className="text-lg font-bold text-slate-900">{company.nameEn}</div>
+                <div className="text-lg font-bold text-slate-900">{company?.logoUrl && (<img src={company.logoUrl} alt="Company Logo" className="h-12 max-w-[160px] object-contain mb-1.5" />)}`n                  {company.nameEn}</div>
                 <div className="text-sm font-bold text-blue-700">{company.nameAr}</div>
                 <div className="font-mono font-semibold">VAT Reg / الرقم الضريبي: {company.vatNumber}</div>
                 <div className="text-rose-700 font-semibold">Original Invoice Ref: {previewCN.original_invoice_number}</div>

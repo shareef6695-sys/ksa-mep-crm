@@ -30,6 +30,7 @@ const DEFAULT_COMPANY = {
   nameEn: 'Horizon Business Solutions Est.',
   nameAr: 'مؤسسة حلول الأفق للأعمال',
   vatNumber: '300000000000003',
+    logoUrl: '',
   crNumber: '4030000000',
   city: 'Jeddah',
   addressEn: 'Jeddah, Kingdom of Saudi Arabia',
@@ -1982,6 +1983,7 @@ export default function App() {
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">15-Digit ZATCA VAT Number</label>
                   <input type="text" maxLength={15} value={company.vatNumber} onChange={(e) => setCompany({ ...company, vatNumber: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2 font-mono text-base sm:text-xs" />
+              <div className="sm:col-span-2"><CompanyLogoUploader logoUrl={company.logoUrl} onChange={(val) => setCompany((prev) => ({ ...prev, logoUrl: val }))} /></div>
                 </div>
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Commercial Registration (CR)</label>

@@ -283,7 +283,7 @@ export function FinancialStatementsView({ company, glAccounts, glEntries }) {
         <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
           <div className="bg-slate-900 text-white p-5 flex flex-wrap justify-between items-start gap-4">
             <div>
-              <div className="text-base font-bold">{company.nameEn}</div>
+              {company?.logoUrl && (<img src={company.logoUrl} alt="Company Logo" className="h-11 max-w-[160px] object-contain bg-white rounded-lg p-1 mb-2" />)}`n              <div className="text-base font-bold">{company.nameEn}</div>
               <div className="text-sm text-blue-300 font-semibold">{company.nameAr}</div>
               <div className="text-[11px] text-slate-300 mt-1 font-mono">
                 VAT TIN: {company.vatNumber} • CR: {company.crNumber}
@@ -399,7 +399,7 @@ export function FinancialStatementsView({ company, glAccounts, glEntries }) {
         <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
           <div className="bg-slate-900 text-white p-5 flex flex-wrap justify-between items-start gap-4">
             <div>
-              <div className="text-base font-bold">{company.nameEn}</div>
+              {company?.logoUrl && (<img src={company.logoUrl} alt="Company Logo" className="h-11 max-w-[160px] object-contain bg-white rounded-lg p-1 mb-2" />)}`n              <div className="text-base font-bold">{company.nameEn}</div>
               <div className="text-sm text-blue-300 font-semibold">{company.nameAr}</div>
               <div className="text-[11px] text-slate-300 mt-1 font-mono">
                 VAT TIN: {company.vatNumber} • CR: {company.crNumber}
