@@ -1951,7 +1951,7 @@ export default function App() {
             </div>
           )}
 
-          {activeSubModule === 'set_num_ranges' && (<NumberRangesView supabase={supabase} ranges={numberRanges} onRefresh={refreshAllErpData} />)}
+          {activeSubModule === 'set_num_ranges' && (['Admin', 'CEO', 'Finance'].includes(profile?.role || 'Admin') ? <NumberRangesView supabase={supabase} ranges={numberRanges} onRefresh={refreshAllErpData} /> : <div className='bg-amber-50 border border-amber-200 rounded-2xl p-6 text-xs text-amber-900 font-semibold'>Access Restricted: Only Admin / CEO or Finance roles can modify Document Number Ranges.</div>)}
 
           {/* SUB-MODULE: 6.2 COMPANY SETTINGS */}
           {activeSubModule === 'set_company' && (
