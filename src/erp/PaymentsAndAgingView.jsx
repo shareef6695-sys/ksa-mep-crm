@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Banknote, Plus, Clock, AlertCircle, CheckCircle2, X, ArrowRightLeft } from 'lucide-react';
 import { formatSAR } from './erpEngine';
+import { postAutoJournal } from './glEngine';
 
 function getDaysOld(dateStr) {
   if (!dateStr) return 0;
@@ -76,6 +77,10 @@ export function SupplierPaymentsView({
       const fxVarianceSar = Number((amtSar - bookedSar).toFixed(2));
 
       const { data: payNum } = await supabase.rpc('next_doc_number', { p_doc_type: 'SUPPLIER_PAY' });
+      const glLines = [{ account_code: '2010', account_name: '2010 - Accounts Payable (Trade Suppliers)', debit: bookedSar, credit: 0, memo: selectedPO.po_number + ' (' + selectedPO.supplier_name + ')' }, { account_code: '1020', account_name: '1020 - Al Rajhi / SNB Main Bank Account (SAR)', debit: 0, credit: amtSar, memo: form.payment_method + ' ' + (form.bank_reference || '') }];
+      if (fxVarianceSar > 0) glLines.push({ account_code: '5130', account_name: '5130 - Bank Charges & Realized FX Gain/Loss', debit: fxVarianceSar, credit: 0, memo: 'Realized FX Loss on ' + selectedPO.currency });
+      if (fxVarianceSar < 0) glLines.push({ account_code: '5130', account_name: '5130 - Bank Charges & Realized FX Gain/Loss', debit: 0, credit: Math.abs(fxVarianceSar), memo: 'Realized FX Gain on ' + selectedPO.currency });
+      await postAutoJournal({ supabase, entryDate: form.payment_date, sourceModule: 'SUPPLIER_PAY', sourceDocNumber: payNum, description: 'Supplier Payment ' + payNum + ' - ' + selectedPO.supplier_name + ' (' + selectedPO.po_number + ')', postedBy: profile?.full_name || 'Finance', lines: glLines });
 
       await supabase.from('supplier_payments').insert({
         id: `spay-${Date.now()}`,

@@ -96,6 +96,7 @@ export function CreditNotesView({
       };
 
       const { data: insertedCN } = await supabase.from('credit_notes').insert(newCN).select().single();
+      await postAutoJournal({ supabase, entryDate: issuedIso.slice(0, 10), sourceModule: 'CREDIT_NOTE', sourceDocNumber: cnNum, description: 'ZATCA Credit Note ' + cnNum + ' vs ' + selectedInvoice.invoice_number + ' (' + selectedInvoice.client_name + ')', postedBy: profile?.full_name || 'Finance', lines: [{ account_code: '4090', account_name: '4090 - Sales Returns & Credit Notes', debit: subtotal, credit: 0, memo: reason }, { account_code: '2100', account_name: '2100 - VAT Payable / Output VAT (15%)', debit: vat, credit: 0, memo: 'VAT Reversal 15%' }, { account_code: '1100', account_name: '1100 - Accounts Receivable (Trade Customers)', debit: 0, credit: grandTotal, memo: selectedInvoice.client_name }, { account_code: '1200', account_name: '1200 - Inventory / Warehouse Stock Asset', debit: costReversed, credit: 0, memo: 'Stock Return Valuation' }, { account_code: '5010', account_name: '5010 - Cost of Goods Sold (Landed COGS)', debit: 0, credit: costReversed, memo: 'COGS Reversal' }] });
 
       // 1. Reduce Original Invoice Payable Balance
       const revisedInvTotal = Math.max(0, Number(selectedInvoice.grand_total_sar) - grandTotal);
