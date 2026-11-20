@@ -5,9 +5,10 @@ import {
   Lock, Eye, EyeOff, LogOut, RefreshCw, ArrowRight, Layers,
   Truck, Receipt, ShoppingBag, Percent, Settings, Printer, QrCode,
   ChevronDown, ChevronRight, Menu, PanelLeftClose, PanelLeftOpen,
-  FileText, CreditCard, PackageCheck, Users, Sliders
+  FileText, CreditCard, PackageCheck, Users, Sliders, Package
 } from 'lucide-react';
 import { generateZatcaQrBase64, getZatcaComplianceAdvice, formatSAR } from './erp/erpEngine';
+import { CustomersMasterView, VendorsMasterView, ItemsMasterView, ZATCA_VAT_TYPES } from './erp/MasterDataViews';
 
 const SUPABASE_URL = 'https://jknuhynysewoizjxbidw.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImprbnVoeW55c2V3b2l6anhiaWR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUxODgwMDMsImV4cCI6MjExMDc2NDAwM30.cM0tm_pnvgIN40MYrIB92RR4g4bLvFQx415hvOWuLsU';
@@ -80,7 +81,7 @@ function LoginLandingPage({ company, onLoginSuccess }) {
           </h1>
           <p className="text-base sm:text-xl text-blue-300 font-semibold mt-1">{company.nameAr}</p>
           <p className="mt-3 text-sm sm:text-base text-slate-300 max-w-xl leading-relaxed">
-            Integrated Sales Orders, Partial/Full Deliveries, ZATCA E-Invoicing, Multi-Currency Purchase Cycle &amp; Collection-Based Profit Share.
+            Integrated Master Data, Sales Orders, Partial/Full Deliveries, ZATCA E-Invoicing, Multi-Currency Purchase Cycle &amp; Collection-Based Profit Share.
           </p>
         </div>
         <div className="hidden lg:flex mt-12 pt-6 border-t border-slate-800/80 items-center justify-between text-xs text-slate-500">
@@ -159,19 +160,20 @@ export default function App() {
   const [fxRates, setFxRates] = useState(DEFAULT_FX);
   const [syncStatus, setSyncStatus] = useState('connecting');
 
-  // Left Sidebar Navigation State (Collapsible Main Modules & Sub-Modules)
+  // Left Sidebar Navigation State
   const [activeSubModule, setActiveSubModule] = useState('sales_quotes');
   const [expandedModules, setExpandedModules] = useState({
     sales: true,
     finance: true,
     purchase: true,
     profit_share: true,
+    master_catalog: true,
     settings: false,
   });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
-  // Core ERP Data Tables
+  // Core ERP & Master Data Tables
   const [inquiries, setInquiries] = useState([]);
   const [salesOrders, setSalesOrders] = useState([]);
   const [deliveryNotes, setDeliveryNotes] = useState([]);
@@ -179,11 +181,16 @@ export default function App() {
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [receipts, setReceipts] = useState([]);
   const [commissions, setCommissions] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [vendors, setVendors] = useState([]);
+  const [items, setItems] = useState([]);
+  const [customUoms, setCustomUoms] = useState([]);
 
   // Modals & Drawers
   const [selectedInqId, setSelectedInqId] = useState(null);
   const [showNewInqModal, setShowNewInqModal] = useState(false);
   const [newInq, setNewInq] = useState({
+    customerId: '',
     clientName: '',
     clientVat: '',
     contactPerson: '',
@@ -191,8 +198,12 @@ export default function App() {
     email: '',
     division: 'MEP',
     salesmanId: '',
+    itemId: '',
     firstItemDesc: '',
     firstItemQty: 1,
+    firstItemUom: 'PCS',
+    firstItemCost: 0,
+    firstItemCurrency: 'USD',
   });
 
   const [deliveryModalSO, setDeliveryModalSO] = useState(null);
@@ -209,11 +220,13 @@ export default function App() {
   const [showNewPOModal, setShowNewPOModal] = useState(false);
   const [newPO, setNewPO] = useState({
     soId: '',
+    vendorId: '',
     supplierName: '',
     supplierVat: '',
     currency: 'USD',
     fxRate: 3.75,
     landedCostSar: 0,
+    itemId: '',
     itemDesc: '',
     itemQty: 1,
     unitCostFx: 0,
@@ -222,7 +235,7 @@ export default function App() {
 
   const [settingsSavedMsg, setSettingsSavedMsg] = useState('');
 
-  // Hierarchical ERP Navigation Tree
+  // Hierarchical ERP Navigation Tree with Master Data inside each related module
   const navTree = useMemo(
     () => [
       {
@@ -230,6 +243,7 @@ export default function App() {
         label: '1. Sales & Fulfillment',
         icon: Layers,
         subModules: [
+          { id: 'sales_customers', label: 'Customers Master', icon: Users, count: customers.length },
           { id: 'sales_quotes', label: 'Inquiries & Quotes', icon: FileText, count: inquiries.length },
           { id: 'sales_orders', label: 'Sales Orders (SO)', icon: ShoppingBag, count: salesOrders.length },
           { id: 'sales_deliveries', label: 'Deliveries (Full/Partial)', icon: Truck, count: deliveryNotes.length },
@@ -250,14 +264,23 @@ export default function App() {
         label: '3. Purchase Full Cycle',
         icon: ShoppingBag,
         subModules: [
+          { id: 'pur_vendors', label: 'Vendors / Suppliers Master', icon: Building2, count: vendors.length },
           { id: 'pur_orders', label: 'Purchase Orders (PO)', icon: FileText, count: purchaseOrders.filter((p) => p.status === 'po_issued').length },
           { id: 'pur_grn', label: 'Goods Receipt (GRN)', icon: PackageCheck, count: purchaseOrders.filter((p) => p.status === 'grn_completed').length },
           { id: 'pur_bills', label: 'Supplier Bills & Landed Cost', icon: Receipt, count: purchaseOrders.filter((p) => p.status === 'billed').length },
         ],
       },
       {
+        id: 'master_catalog',
+        label: '4. Items & Services Catalog',
+        icon: Package,
+        subModules: [
+          { id: 'cat_items', label: 'Items Master (Goods/Services)', icon: Package, count: items.length },
+        ],
+      },
+      {
         id: 'profit_share',
-        label: '4. Sales Profit Share',
+        label: '5. Sales Profit Share',
         icon: Percent,
         subModules: [
           { id: 'comm_ledger', label: 'Collection Commission Ledger', icon: Percent, count: commissions.length },
@@ -265,7 +288,7 @@ export default function App() {
       },
       {
         id: 'settings',
-        label: '5. Administration & Rules',
+        label: '6. Administration & Rules',
         icon: Settings,
         subModules: [
           { id: 'set_company', label: 'Company & ZATCA Profile', icon: Sliders },
@@ -273,7 +296,7 @@ export default function App() {
         ],
       },
     ],
-    [inquiries.length, salesOrders.length, deliveryNotes.length, invoices.length, receipts.length, purchaseOrders, commissions.length, teamProfiles.length]
+    [customers.length, inquiries.length, salesOrders.length, deliveryNotes.length, invoices.length, receipts.length, vendors.length, purchaseOrders, items.length, commissions.length, teamProfiles.length]
   );
 
   const toggleMainModule = (modId) => {
@@ -327,6 +350,10 @@ export default function App() {
       recRes,
       commRes,
       profRes,
+      custRes,
+      vendRes,
+      itemRes,
+      uomRes,
     ] = await Promise.all([
       supabase.from('app_settings').select('*'),
       supabase.from('inquiries').select('*').order('updated_at', { ascending: false }),
@@ -337,6 +364,10 @@ export default function App() {
       supabase.from('customer_receipts').select('*').order('received_at', { ascending: false }),
       supabase.from('commission_ledger').select('*').order('updated_at', { ascending: false }),
       supabase.from('team_profiles').select('*').order('full_name'),
+      supabase.from('customers').select('*').order('name_en'),
+      supabase.from('vendors').select('*').order('name_en'),
+      supabase.from('items').select('*').order('name_en'),
+      supabase.from('custom_uoms').select('*').order('code'),
     ]);
 
     if (settingsRes.data) {
@@ -353,6 +384,10 @@ export default function App() {
     if (recRes.data) setReceipts(recRes.data);
     if (commRes.data) setCommissions(commRes.data);
     if (profRes.data) setTeamProfiles(profRes.data);
+    if (custRes.data) setCustomers(custRes.data);
+    if (vendRes.data) setVendors(vendRes.data);
+    if (itemRes.data) setItems(itemRes.data);
+    if (uomRes.data) setCustomUoms(uomRes.data);
     setSyncStatus('live');
   };
 
@@ -361,7 +396,7 @@ export default function App() {
     refreshAllErpData();
 
     const channel = supabase
-      .channel('horizon-erp-phase1-sidebar')
+      .channel('horizon-erp-masterdata')
       .on('postgres_changes', { event: '*', schema: 'public' }, () => {
         refreshAllErpData();
       })
@@ -384,7 +419,41 @@ export default function App() {
     [annualTaxableRevenueSAR, company.zatcaPhase2Connected]
   );
 
-  // CRUD & Workflow Actions
+  // Auto-fill Inquiry from Customers & Items Master Data
+  const handleSelectCustomerForInq = (custId) => {
+    const c = customers.find((x) => x.id === custId);
+    if (!c) {
+      setNewInq({ ...newInq, customerId: '' });
+      return;
+    }
+    setNewInq({
+      ...newInq,
+      customerId: c.id,
+      clientName: c.name_en,
+      clientVat: c.vat_number || '',
+      contactPerson: c.contact_person,
+      phone: c.phone,
+      email: c.email || '',
+      salesmanId: c.assigned_salesman_id || newInq.salesmanId,
+    });
+  };
+
+  const handleSelectItemForInq = (itemId) => {
+    const it = items.find((x) => x.id === itemId);
+    if (!it) {
+      setNewInq({ ...newInq, itemId: '' });
+      return;
+    }
+    setNewInq({
+      ...newInq,
+      itemId: it.id,
+      firstItemDesc: `${it.name_en} (${it.name_ar})`,
+      firstItemUom: it.uom,
+      firstItemCost: Number(it.purchase_price || 0),
+      firstItemCurrency: it.purchase_currency || 'SAR',
+    });
+  };
+
   const handleCreateInquiry = async (e) => {
     e.preventDefault();
     const num = Math.floor(101 + Math.random() * 898);
@@ -392,6 +461,7 @@ export default function App() {
     const obj = {
       id: `INQ-${new Date().getFullYear()}-${num}`,
       refNo: `HBS-${newInq.division === 'MEP' ? 'MEP' : 'IT'}-${num}`,
+      customerId: newInq.customerId || null,
       clientName: newInq.clientName,
       clientVat: newInq.clientVat,
       contactPerson: newInq.contactPerson,
@@ -408,11 +478,12 @@ export default function App() {
       boqItems: [
         {
           id: `b-${Date.now()}`,
+          itemId: newInq.itemId || null,
           desc: newInq.firstItemDesc,
           qty: Number(newInq.firstItemQty) || 1,
-          unit: 'Nos',
-          buyCurrency: 'USD',
-          buyUnitCost: 0,
+          unit: newInq.firstItemUom || 'PCS',
+          buyCurrency: newInq.firstItemCurrency || 'USD',
+          buyUnitCost: Number(newInq.firstItemCost) || 0,
         },
       ],
     };
@@ -424,7 +495,11 @@ export default function App() {
     });
     setShowNewInqModal(false);
     setSelectedInqId(obj.id);
-    setNewInq({ clientName: '', clientVat: '', contactPerson: '', phone: '', email: '', division: 'MEP', salesmanId: '', firstItemDesc: '', firstItemQty: 1 });
+    setNewInq({
+      customerId: '', clientName: '', clientVat: '', contactPerson: '', phone: '', email: '',
+      division: 'MEP', salesmanId: '', itemId: '', firstItemDesc: '', firstItemQty: 1,
+      firstItemUom: 'PCS', firstItemCost: 0, firstItemCurrency: 'USD',
+    });
     refreshAllErpData();
   };
 
@@ -453,7 +528,7 @@ export default function App() {
         orderedQty: Number(b.qty) || 1,
         deliveredQty: 0,
         invoicedQty: 0,
-        unit: b.unit || 'Nos',
+        unit: b.unit || 'PCS',
         unitCostSar,
         unitSellSar,
       };
@@ -678,6 +753,39 @@ export default function App() {
     refreshAllErpData();
   };
 
+  // Auto-fill PO from Vendors & Items Master Data
+  const handleSelectVendorForPO = (vendId) => {
+    const v = vendors.find((x) => x.id === vendId);
+    if (!v) {
+      setNewPO({ ...newPO, vendorId: '' });
+      return;
+    }
+    setNewPO({
+      ...newPO,
+      vendorId: v.id,
+      supplierName: v.name_en,
+      supplierVat: v.vat_number || '',
+      currency: v.default_currency || 'SAR',
+      fxRate: fxRates[v.default_currency] || 1,
+    });
+  };
+
+  const handleSelectItemForPO = (itemId) => {
+    const it = items.find((x) => x.id === itemId);
+    if (!it) {
+      setNewPO({ ...newPO, itemId: '' });
+      return;
+    }
+    setNewPO({
+      ...newPO,
+      itemId: it.id,
+      itemDesc: `${it.name_en} (${it.uom})`,
+      unitCostFx: Number(it.purchase_price || 0),
+      currency: it.purchase_currency || newPO.currency,
+      fxRate: fxRates[it.purchase_currency] || newPO.fxRate,
+    });
+  };
+
   const handleCreatePO = async (e) => {
     e.preventDefault();
     const linkedSO = salesOrders.find((s) => s.id === newPO.soId);
@@ -761,10 +869,8 @@ export default function App() {
 
   const selectedInq = inquiries.find((i) => i.id === selectedInqId) || null;
 
-  // Reusable Sidebar Navigation Content (Used on Desktop Left Rail & Mobile Slide-Out Drawer)
   const renderSidebarNav = (isMobile = false) => (
     <div className="flex flex-col h-full bg-slate-900 text-slate-200 select-none">
-      {/* Brand Header */}
       <div className="p-3.5 border-b border-slate-800 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-base shrink-0">
@@ -795,7 +901,6 @@ export default function App() {
         )}
       </div>
 
-      {/* Collapsible Main Modules & Sub-Modules Tree */}
       <nav className="flex-1 overflow-y-auto p-2.5 space-y-1.5">
         {navTree.map((mod) => {
           const ModIcon = mod.icon;
@@ -822,7 +927,6 @@ export default function App() {
                 )}
               </button>
 
-              {/* Collapsible Sub-Modules List */}
               {isExpanded && (!sidebarCollapsed || isMobile) && (
                 <div className="ml-3 pl-2.5 border-l border-slate-800 space-y-0.5">
                   {mod.subModules.map((sub) => {
@@ -857,7 +961,6 @@ export default function App() {
         })}
       </nav>
 
-      {/* Signed-in User Footer */}
       <div className="p-3 border-t border-slate-800 flex items-center justify-between gap-2">
         {(!sidebarCollapsed || isMobile) && (
           <div className="min-w-0">
@@ -878,12 +981,10 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex">
-      {/* Desktop Fixed Left Sidebar */}
       <aside className={`hidden lg:block shrink-0 border-r border-slate-800 transition-all duration-200 ${sidebarCollapsed ? 'w-16' : 'w-68'}`}>
         <div className="sticky top-0 h-screen">{renderSidebarNav(false)}</div>
       </aside>
 
-      {/* Mobile Slide-Out Left Drawer */}
       {mobileDrawerOpen && (
         <div className="fixed inset-0 z-50 lg:hidden flex">
           <div className="w-72 max-w-[85vw] h-full shadow-2xl">{renderSidebarNav(true)}</div>
@@ -891,9 +992,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Main Content Workspace */}
       <div className="flex-1 min-w-0 flex flex-col">
-        {/* Top Bar (Mobile Menu Button + Breadcrumb + VAT Info) */}
         <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3 flex items-center justify-between gap-3 sticky top-0 z-20">
           <div className="flex items-center gap-3 min-w-0">
             <button
@@ -918,7 +1017,6 @@ export default function App() {
         </header>
 
         <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-5 space-y-5">
-          {/* ZATCA Revenue Wave Advisor Strip */}
           <div className={`p-3 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs ${zatcaAdvice.badgeClass}`}>
             <div className="flex items-start sm:items-center gap-2">
               <QrCode className="w-4 h-4 shrink-0 mt-0.5 sm:mt-0" />
@@ -929,9 +1027,38 @@ export default function App() {
             </div>
           </div>
 
-          {/* ================================================================ */}
-          {/* SUB-MODULE: 1.1 INQUIRIES & QUOTES                               */}
-          {/* ================================================================ */}
+          {/* MASTER DATA VIEWS IN THEIR RELATED MODULES */}
+          {activeSubModule === 'sales_customers' && (
+            <CustomersMasterView
+              supabase={supabase}
+              customers={customers}
+              salesmenList={salesmenList}
+              onRefresh={refreshAllErpData}
+            />
+          )}
+
+          {activeSubModule === 'pur_vendors' && (
+            <VendorsMasterView
+              supabase={supabase}
+              vendors={vendors}
+              currencies={CURRENCIES}
+              onRefresh={refreshAllErpData}
+            />
+          )}
+
+          {activeSubModule === 'cat_items' && (
+            <ItemsMasterView
+              supabase={supabase}
+              items={items}
+              customUoms={customUoms}
+              vendors={vendors}
+              customers={customers}
+              currencies={CURRENCIES}
+              onRefresh={refreshAllErpData}
+            />
+          )}
+
+          {/* SUB-MODULE: 1.2 INQUIRIES & QUOTES */}
           {activeSubModule === 'sales_quotes' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -1005,9 +1132,7 @@ export default function App() {
             </div>
           )}
 
-          {/* ================================================================ */}
-          {/* SUB-MODULE: 1.2 SALES ORDERS (SO)                                */}
-          {/* ================================================================ */}
+          {/* SUB-MODULE: 1.3 SALES ORDERS */}
           {activeSubModule === 'sales_orders' && (
             <div className="space-y-4">
               <div>
@@ -1079,9 +1204,7 @@ export default function App() {
             </div>
           )}
 
-          {/* ================================================================ */}
-          {/* SUB-MODULE: 1.3 DELIVERIES (FULL / PARTIAL)                      */}
-          {/* ================================================================ */}
+          {/* SUB-MODULE: 1.4 DELIVERIES */}
           {activeSubModule === 'sales_deliveries' && (
             <div className="space-y-4">
               <div>
@@ -1091,7 +1214,7 @@ export default function App() {
 
               {deliveryNotes.length === 0 ? (
                 <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-slate-500">
-                  No Delivery Notes recorded yet. Open <strong>Sales Orders (SO)</strong> and click <strong>Record Delivery</strong>.
+                  No Delivery Notes recorded yet.
                 </div>
               ) : (
                 <div className="grid gap-3">
@@ -1128,9 +1251,7 @@ export default function App() {
             </div>
           )}
 
-          {/* ================================================================ */}
-          {/* SUB-MODULE: 1.4 ZATCA INVOICES                                   */}
-          {/* ================================================================ */}
+          {/* SUB-MODULE: 1.5 ZATCA INVOICES */}
           {activeSubModule === 'sales_invoices' && (
             <div className="space-y-4">
               <div>
@@ -1197,9 +1318,7 @@ export default function App() {
             </div>
           )}
 
-          {/* ================================================================ */}
-          {/* SUB-MODULE: 2.1 AR CUSTOMER RECEIPTS                             */}
-          {/* ================================================================ */}
+          {/* SUB-MODULE: 2.1 AR CUSTOMER RECEIPTS */}
           {activeSubModule === 'fin_collections' && (
             <div className="space-y-4">
               <div>
@@ -1209,7 +1328,7 @@ export default function App() {
 
               {receipts.length === 0 ? (
                 <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-slate-500">
-                  No customer payments recorded yet. Open <strong>ZATCA Invoices</strong> and click <strong>+ Receive Payment</strong>.
+                  No customer payments recorded yet.
                 </div>
               ) : (
                 <div className="grid gap-3">
@@ -1231,9 +1350,7 @@ export default function App() {
             </div>
           )}
 
-          {/* ================================================================ */}
-          {/* SUB-MODULE: 2.2 ZATCA WAVE & VAT SUMMARY                         */}
-          {/* ================================================================ */}
+          {/* SUB-MODULE: 2.2 ZATCA WAVE & VAT */}
           {activeSubModule === 'fin_zatca_advisor' && (
             <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
               <h2 className="text-base font-bold text-slate-900">ZATCA Fatoora Wave Readiness &amp; VAT Output Summary</h2>
@@ -1256,9 +1373,7 @@ export default function App() {
             </div>
           )}
 
-          {/* ================================================================ */}
-          {/* SUB-MODULES: 3.1 / 3.2 / 3.3 PURCHASE CYCLE                      */}
-          {/* ================================================================ */}
+          {/* SUB-MODULES: 3.2 / 3.3 / 3.4 PURCHASE CYCLE */}
           {['pur_orders', 'pur_grn', 'pur_bills'].includes(activeSubModule) && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -1341,9 +1456,7 @@ export default function App() {
             </div>
           )}
 
-          {/* ================================================================ */}
-          {/* SUB-MODULE: 4.1 COLLECTION-BASED SALES PROFIT SHARE LEDGER       */}
-          {/* ================================================================ */}
+          {/* SUB-MODULE: 5.1 SALES PROFIT SHARE LEDGER */}
           {activeSubModule === 'comm_ledger' && (
             <div className="space-y-4">
               <div>
@@ -1355,7 +1468,7 @@ export default function App() {
 
               {commissions.length === 0 ? (
                 <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-slate-500">
-                  No profit-share entries yet. Assign a salesman with a Commission % and issue an invoice to track profit share.
+                  No profit-share entries yet.
                 </div>
               ) : (
                 <div className="grid gap-3">
@@ -1392,9 +1505,7 @@ export default function App() {
             </div>
           )}
 
-          {/* ================================================================ */}
-          {/* SUB-MODULE: 5.1 EDITABLE COMPANY & ZATCA PROFILE                 */}
-          {/* ================================================================ */}
+          {/* SUB-MODULE: 6.1 COMPANY SETTINGS */}
           {activeSubModule === 'set_company' && (
             <form onSubmit={handleSaveCompanySettings} className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 max-w-2xl">
               <div className="border-b border-slate-100 pb-3">
@@ -1410,60 +1521,27 @@ export default function App() {
               <div className="grid sm:grid-cols-2 gap-3 text-xs">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Company Legal Name (English)</label>
-                  <input
-                    type="text"
-                    value={company.nameEn}
-                    onChange={(e) => setCompany({ ...company, nameEn: e.target.value })}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2 text-base sm:text-xs"
-                  />
+                  <input type="text" value={company.nameEn} onChange={(e) => setCompany({ ...company, nameEn: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2 text-base sm:text-xs" />
                 </div>
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Company Legal Name (Arabic)</label>
-                  <input
-                    type="text"
-                    dir="rtl"
-                    value={company.nameAr}
-                    onChange={(e) => setCompany({ ...company, nameAr: e.target.value })}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2 text-base sm:text-xs"
-                  />
+                  <input type="text" dir="rtl" value={company.nameAr} onChange={(e) => setCompany({ ...company, nameAr: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2 text-base sm:text-xs" />
                 </div>
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">15-Digit ZATCA VAT Number</label>
-                  <input
-                    type="text"
-                    maxLength={15}
-                    value={company.vatNumber}
-                    onChange={(e) => setCompany({ ...company, vatNumber: e.target.value })}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2 font-mono text-base sm:text-xs"
-                  />
+                  <input type="text" maxLength={15} value={company.vatNumber} onChange={(e) => setCompany({ ...company, vatNumber: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2 font-mono text-base sm:text-xs" />
                 </div>
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Commercial Registration (CR)</label>
-                  <input
-                    type="text"
-                    value={company.crNumber}
-                    onChange={(e) => setCompany({ ...company, crNumber: e.target.value })}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2 font-mono text-base sm:text-xs"
-                  />
+                  <input type="text" value={company.crNumber} onChange={(e) => setCompany({ ...company, crNumber: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2 font-mono text-base sm:text-xs" />
                 </div>
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Address (English)</label>
-                  <input
-                    type="text"
-                    value={company.addressEn}
-                    onChange={(e) => setCompany({ ...company, addressEn: e.target.value })}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2 text-base sm:text-xs"
-                  />
+                  <input type="text" value={company.addressEn} onChange={(e) => setCompany({ ...company, addressEn: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2 text-base sm:text-xs" />
                 </div>
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Address (Arabic)</label>
-                  <input
-                    type="text"
-                    dir="rtl"
-                    value={company.addressAr}
-                    onChange={(e) => setCompany({ ...company, addressAr: e.target.value })}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2 text-base sm:text-xs"
-                  />
+                  <input type="text" dir="rtl" value={company.addressAr} onChange={(e) => setCompany({ ...company, addressAr: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2 text-base sm:text-xs" />
                 </div>
               </div>
 
@@ -1479,18 +1557,13 @@ export default function App() {
                 </span>
               </label>
 
-              <button
-                type="submit"
-                className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold cursor-pointer"
-              >
+              <button type="submit" className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold cursor-pointer">
                 Save Company Settings
               </button>
             </form>
           )}
 
-          {/* ================================================================ */}
-          {/* SUB-MODULE: 5.2 SALESMAN PROFIT SHARE % CONFIGURATION            */}
-          {/* ================================================================ */}
+          {/* SUB-MODULE: 6.2 SALESMAN PROFIT SHARE % */}
           {activeSubModule === 'set_salesmen' && (
             <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 max-w-2xl">
               <div className="border-b border-slate-100 pb-3">
@@ -1560,7 +1633,7 @@ export default function App() {
                     saveInquiryPatch(selectedInq, {
                       boqItems: [
                         ...(selectedInq.boqItems || []),
-                        { id: `b-${Date.now()}`, desc: 'New Item', qty: 1, unit: 'Nos', buyCurrency: 'USD', buyUnitCost: 0 },
+                        { id: `b-${Date.now()}`, desc: 'New Item', qty: 1, unit: 'PCS', buyCurrency: 'USD', buyUnitCost: 0 },
                       ],
                     })
                   }
@@ -1572,6 +1645,35 @@ export default function App() {
 
               {(selectedInq.boqItems || []).map((item) => (
                 <div key={item.id} className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
+                  {items.length > 0 && (
+                    <select
+                      value={item.itemId || ''}
+                      onChange={(e) => {
+                        const chosen = items.find((x) => x.id === e.target.value);
+                        if (!chosen) return;
+                        saveInquiryPatch(selectedInq, {
+                          boqItems: selectedInq.boqItems.map((b) =>
+                            b.id === item.id
+                              ? {
+                                  ...b,
+                                  itemId: chosen.id,
+                                  desc: `${chosen.name_en} (${chosen.name_ar})`,
+                                  unit: chosen.uom,
+                                  buyCurrency: chosen.purchase_currency,
+                                  buyUnitCost: Number(chosen.purchase_price || 0),
+                                }
+                              : b
+                          ),
+                        });
+                      }}
+                      className="w-full bg-white border border-blue-200 rounded-lg px-2.5 py-1.5 text-blue-800 font-semibold"
+                    >
+                      <option value="">Pick from Items Master (Optional)...</option>
+                      {items.map((it) => (
+                        <option key={it.id} value={it.id}>{it.item_code} — {it.name_en} ({it.uom})</option>
+                      ))}
+                    </select>
+                  )}
                   <input
                     type="text"
                     value={item.desc}
@@ -1663,7 +1765,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL: NEW INQUIRY */}
+      {/* MODAL: NEW INQUIRY (LINKED TO CUSTOMERS & ITEMS MASTER DATA) */}
       {showNewInqModal && (
         <div className="fixed inset-0 bg-slate-950/70 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
           <div className="bg-white rounded-t-3xl sm:rounded-2xl max-w-lg w-full p-5 sm:p-6 space-y-4">
@@ -1672,6 +1774,22 @@ export default function App() {
               <button onClick={() => setShowNewInqModal(false)}><X className="w-5 h-5" /></button>
             </div>
             <form onSubmit={handleCreateInquiry} className="space-y-3 text-xs">
+              {customers.length > 0 && (
+                <div>
+                  <label className="block font-semibold text-blue-700 mb-1">Select Registered Customer (or type below)</label>
+                  <select
+                    value={newInq.customerId}
+                    onChange={(e) => handleSelectCustomerForInq(e.target.value)}
+                    className="w-full border border-blue-300 bg-blue-50/40 rounded-xl px-3 py-2.5 font-semibold"
+                  >
+                    <option value="">-- Choose from Customers Master --</option>
+                    {customers.map((c) => (
+                      <option key={c.id} value={c.id}>{c.customer_code} — {c.name_en} ({c.customer_type})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <input
                 type="text"
                 required
@@ -1729,6 +1847,23 @@ export default function App() {
                   ))}
                 </select>
               </div>
+
+              {items.length > 0 && (
+                <div>
+                  <label className="block font-semibold text-blue-700 mb-1">Select Item / Service from Master Catalog</label>
+                  <select
+                    value={newInq.itemId}
+                    onChange={(e) => handleSelectItemForInq(e.target.value)}
+                    className="w-full border border-blue-300 bg-blue-50/40 rounded-xl px-3 py-2.5 font-semibold"
+                  >
+                    <option value="">-- Choose from Items Master --</option>
+                    {items.map((it) => (
+                      <option key={it.id} value={it.id}>{it.item_code} — {it.name_en} ({it.uom})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <input
                 type="text"
                 required
@@ -1929,7 +2064,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL: NEW PURCHASE ORDER */}
+      {/* MODAL: NEW PURCHASE ORDER (LINKED TO VENDORS & ITEMS MASTER DATA) */}
       {showNewPOModal && (
         <div className="fixed inset-0 bg-slate-950/70 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4">
@@ -1948,6 +2083,23 @@ export default function App() {
                   <option key={s.id} value={s.id}>{s.so_number} — {s.client_name}</option>
                 ))}
               </select>
+
+              {vendors.length > 0 && (
+                <div>
+                  <label className="block font-semibold text-blue-700 mb-1">Select Registered Vendor (or enter below)</label>
+                  <select
+                    value={newPO.vendorId}
+                    onChange={(e) => handleSelectVendorForPO(e.target.value)}
+                    className="w-full border border-blue-300 bg-blue-50/40 rounded-xl px-3 py-2.5 font-semibold"
+                  >
+                    <option value="">-- Choose from Vendors Master --</option>
+                    {vendors.map((v) => (
+                      <option key={v.id} value={v.id}>{v.vendor_code} — {v.name_en} ({v.default_currency})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <input
                   type="text"
@@ -1965,6 +2117,23 @@ export default function App() {
                   className="border border-slate-300 rounded-xl px-3 py-2.5"
                 />
               </div>
+
+              {items.length > 0 && (
+                <div>
+                  <label className="block font-semibold text-blue-700 mb-1">Select Item / Service from Master Catalog</label>
+                  <select
+                    value={newPO.itemId}
+                    onChange={(e) => handleSelectItemForPO(e.target.value)}
+                    className="w-full border border-blue-300 bg-blue-50/40 rounded-xl px-3 py-2.5 font-semibold"
+                  >
+                    <option value="">-- Choose from Items Master --</option>
+                    {items.map((it) => (
+                      <option key={it.id} value={it.id}>{it.item_code} — {it.name_en} ({it.purchase_currency} {it.purchase_price})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <input
                 type="text"
                 required
