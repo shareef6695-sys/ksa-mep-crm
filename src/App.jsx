@@ -1660,7 +1660,7 @@ export default function App() {
                       <div key={po.id} className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div>
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded">{po.po_number} <div className="mt-1"><SharePurchaseOrderButtons company={company} suppliers={vendors} po={po} compact /></div></span>
+                            <span className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded">{po.po_number} <div className="mt-1"><button type="button" onClick={(e) => { e.stopPropagation(); setPreviewPO(po); }} className="no-print px-2 py-1 text-[11px] rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-semibold inline-flex items-center gap-1 cursor-pointer transition"><span>Preview A4 PO</span></button> <SharePurchaseOrderButtons company={company} suppliers={vendors} po={po} compact /></div></span>
                             {po.so_number && <span className="text-xs bg-slate-100 px-2 py-0.5 rounded">Linked: {po.so_number}</span>}
                             <span className="text-xs font-bold uppercase text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
                               {po.status.replace('_', ' ')}
