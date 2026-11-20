@@ -52,7 +52,7 @@ export function CustomersMasterView({ supabase, customers, salesmenList, onRefre
 
   const handleSaveCustomer = async (e) => {
     e.preventDefault();
-    const code = `CUST-${Math.floor(1000 + Math.random() * 8999)}`;
+    const { data: code } = await supabase.rpc('next_doc_number', { p_doc_type: 'CUSTOMER' });
     await supabase.from('customers').insert({
       id: `cust-${Date.now()}`,
       customer_code: code,
@@ -239,7 +239,7 @@ export function VendorsMasterView({ supabase, vendors, currencies, onRefresh }) 
 
   const handleSaveVendor = async (e) => {
     e.preventDefault();
-    const code = `VEND-${Math.floor(1000 + Math.random() * 8999)}`;
+    const { data: code } = await supabase.rpc('next_doc_number', { p_doc_type: 'VENDOR' });
     await supabase.from('vendors').insert({
       id: `vend-${Date.now()}`,
       vendor_code: code,
@@ -448,8 +448,7 @@ export function ItemsMasterView({ supabase, items, customUoms, vendors, customer
 
   const handleSaveItem = async (e) => {
     e.preventDefault();
-    const prefix = form.item_type === 'Service' ? 'SRV' : 'ITM';
-    const itemCode = `${prefix}-${Math.floor(10000 + Math.random() * 89999)}`;
+    const docKey = form.item_type === 'Service' ? 'ITEM_SERVICE' : 'ITEM_GOODS'; const { data: itemCode } = await supabase.rpc('next_doc_number', { p_doc_type: docKey });
 
     await supabase.from('items').insert({
       id: `item-${Date.now()}`,

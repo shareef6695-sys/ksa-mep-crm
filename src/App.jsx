@@ -10,6 +10,7 @@ import {
 import { generateZatcaQrBase64, getZatcaComplianceAdvice, formatSAR } from './erp/erpEngine';
 import { CustomersMasterView, VendorsMasterView, ItemsMasterView, STANDARD_UOMS, ZATCA_VAT_TYPES } from './erp/MasterDataViews';
 import { SmartEntitySelect, GlobalSmartDiscoveryModal } from './erp/SmartDiscovery';
+import { NumberRangesView } from './erp/NumberRangesView';
 
 const SUPABASE_URL = 'https://jknuhynysewoizjxbidw.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImprbnVoeW55c2V3b2l6anhiaWR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUxODgwMDMsImV4cCI6MjExMDc2NDAwM30.cM0tm_pnvgIN40MYrIB92RR4g4bLvFQx415hvOWuLsU';
@@ -199,6 +200,7 @@ export default function App() {
   const [vendors, setVendors] = useState([]);
   const [items, setItems] = useState([]);
   const [customUoms, setCustomUoms] = useState([]);
+  const [numberRanges, setNumberRanges] = useState([]);
 
   // Team / Salesman Creation State
   const [showNewMemberForm, setShowNewMemberForm] = useState(false);
@@ -327,10 +329,11 @@ export default function App() {
         subModules: [
           { id: 'set_salesmen', label: 'Team & Salesmen Master', icon: UserPlus, count: teamProfiles.length },
           { id: 'set_company', label: 'Company & ZATCA Profile', icon: Sliders },
+          { id: 'set_num_ranges', label: 'Document Number Ranges', icon: FileText, count: numberRanges.length },
         ],
       },
     ],
-    [customers.length, inquiries.length, salesOrders.length, deliveryNotes.length, invoices.length, receipts.length, vendors.length, purchaseOrders, items.length, commissions.length, teamProfiles.length]
+    [customers.length, inquiries.length, salesOrders.length, deliveryNotes.length, invoices.length, receipts.length, vendors.length, purchaseOrders, items.length, commissions.length, teamProfiles.length, numberRanges.length]
   );
 
   const toggleMainModule = (modId) => {
@@ -388,6 +391,7 @@ export default function App() {
       vendRes,
       itemRes,
       uomRes,
+      rangeRes,
     ] = await Promise.all([
       supabase.from('app_settings').select('*'),
       supabase.from('inquiries').select('*').order('updated_at', { ascending: false }),
@@ -402,6 +406,7 @@ export default function App() {
       supabase.from('vendors').select('*').order('name_en'),
       supabase.from('items').select('*').order('name_en'),
       supabase.from('custom_uoms').select('*').order('code'),
+      supabase.from('document_number_ranges').select('*').order('doc_type'),
     ]);
 
     if (settingsRes.data) {
@@ -422,6 +427,7 @@ export default function App() {
     if (vendRes.data) setVendors(vendRes.data);
     if (itemRes.data) setItems(itemRes.data);
     if (uomRes.data) setCustomUoms(uomRes.data);
+    if (rangeRes.data) setNumberRanges(rangeRes.data);
     setSyncStatus('live');
   };
 
@@ -575,7 +581,7 @@ export default function App() {
   const handleQuickCreateCustomer = async (e) => {
     e.preventDefault();
     const id = `cust-${Date.now()}`;
-    const code = `CUST-${Math.floor(1000 + Math.random() * 8999)}`;
+    const { data: code } = await supabase.rpc('next_doc_number', { p_doc_type: 'CUSTOMER' });
     await supabase.from('customers').insert({
       id,
       customer_code: code,
@@ -599,7 +605,7 @@ export default function App() {
   const handleQuickCreateVendor = async (e) => {
     e.preventDefault();
     const id = `vend-${Date.now()}`;
-    const code = `VEND-${Math.floor(1000 + Math.random() * 8999)}`;
+    const { data: code } = await supabase.rpc('next_doc_number', { p_doc_type: 'VENDOR' });
     await supabase.from('vendors').insert({
       id,
       vendor_code: code,
@@ -621,8 +627,7 @@ export default function App() {
   const handleQuickCreateItem = async (e) => {
     e.preventDefault();
     const id = `item-${Date.now()}`;
-    const prefix = quickItem.item_type === 'Service' ? 'SRV' : 'ITM';
-    const item_code = `${prefix}-${Math.floor(10000 + Math.random() * 89999)}`;
+    const qDocKey = quickItem.item_type === 'Service' ? 'ITEM_SERVICE' : 'ITEM_GOODS'; const { data: item_code } = await supabase.rpc('next_doc_number', { p_doc_type: qDocKey });
     await supabase.from('items').insert({
       id,
       item_code,
@@ -686,11 +691,7 @@ export default function App() {
 
   const handleCreateInquiry = async (e) => {
     e.preventDefault();
-    const num = Math.floor(101 + Math.random() * 898);
-    const chosenSalesman = teamProfiles.find((p) => p.id === newInq.salesmanId) || salesmenList[0];
-    const obj = {
-      id: `INQ-${new Date().getFullYear()}-${num}`,
-      refNo: `HBS-${newInq.division === 'MEP' ? 'MEP' : 'IT'}-${num}`,
+    const { data: seqInqId } = await supabase.rpc('next_doc_number', { p_doc_type: 'INQUIRY' }); const chosenSalesman = teamProfiles.find((p) => p.id === newInq.salesmanId) || salesmenList[0]; const obj = { id: seqInqId, refNo: seqInqId,
       customerId: newInq.customerId || null,
       clientName: newInq.clientName,
       clientVat: newInq.clientVat,
@@ -747,7 +748,7 @@ export default function App() {
   const handleConvertQuoteToSO = async (inq) => {
     const fin = computeQuoteFinancials(inq, fxRates);
     const marginFactor = fin.totalCostSAR > 0 ? fin.sellNetSAR / fin.totalCostSAR : 1.25;
-    const soNum = `SO-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 8999)}`;
+    const { data: soNum } = await supabase.rpc('next_doc_number', { p_doc_type: 'SO' });
 
     const soItems = (inq.boqItems || []).map((b) => {
       const unitCostSar = (Number(b.buyUnitCost) || 0) * (fxRates[b.buyCurrency] || 1);
@@ -833,7 +834,7 @@ export default function App() {
 
     if (deliveredLines.length === 0) return;
 
-    const dnNum = `DN-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 8999)}`;
+    const { data: dnNum } = await supabase.rpc('next_doc_number', { p_doc_type: 'DN' });
     await supabase.from('delivery_notes').insert({
       id: `dn-${Date.now()}`,
       dn_number: dnNum,
@@ -866,7 +867,7 @@ export default function App() {
     const landedCost = (dn.items || []).reduce((s, it) => s + Number(it.qty) * Number(it.unitCostSar || 0), 0);
     const vat = subtotal * 0.15;
     const grandTotal = subtotal + vat;
-    const invNum = `INV-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 89999)}`;
+    const { data: invNum } = await supabase.rpc('next_doc_number', { p_doc_type: 'INVOICE' });
     const issuedIso = new Date().toISOString();
 
     const qrBase64 = generateZatcaQrBase64({
@@ -945,7 +946,7 @@ export default function App() {
 
     await supabase.from('customer_receipts').insert({
       id: `rcp-${Date.now()}`,
-      receipt_number: `RCP-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 8999)}`,
+      receipt_number: (await supabase.rpc('next_doc_number', { p_doc_type: 'RECEIPT' })).data,
       invoice_id: paymentModalInv.id,
       invoice_number: paymentModalInv.invoice_number,
       client_name: paymentModalInv.client_name,
@@ -1025,7 +1026,7 @@ export default function App() {
 
     await supabase.from('purchase_orders').insert({
       id: `po-${Date.now()}`,
-      po_number: `PO-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 8999)}`,
+      po_number: (await supabase.rpc('next_doc_number', { p_doc_type: 'PO' })).data,
       so_id: linkedSO?.id || null,
       so_number: linkedSO?.so_number || '',
       supplier_name: newPO.supplierName,
@@ -1941,6 +1942,8 @@ export default function App() {
               </div>
             </div>
           )}
+
+          {activeSubModule === 'set_num_ranges' && (<NumberRangesView supabase={supabase} ranges={numberRanges} onRefresh={refreshAllErpData} />)}
 
           {/* SUB-MODULE: 6.2 COMPANY SETTINGS */}
           {activeSubModule === 'set_company' && (
