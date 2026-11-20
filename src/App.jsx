@@ -5,15 +5,21 @@ import {
   Lock, Eye, EyeOff, LogOut, RefreshCw, ArrowRight, Layers,
   Truck, Receipt, ShoppingBag, Percent, Settings, Printer, QrCode,
   ChevronDown, ChevronRight, Menu, PanelLeftClose, PanelLeftOpen,
-  FileText, CreditCard, PackageCheck, Users, Sliders, Package
+  FileText, CreditCard, PackageCheck, Users, Sliders, Package, Search, UserPlus
 } from 'lucide-react';
 import { generateZatcaQrBase64, getZatcaComplianceAdvice, formatSAR } from './erp/erpEngine';
-import { CustomersMasterView, VendorsMasterView, ItemsMasterView, ZATCA_VAT_TYPES } from './erp/MasterDataViews';
+import { CustomersMasterView, VendorsMasterView, ItemsMasterView, STANDARD_UOMS, ZATCA_VAT_TYPES } from './erp/MasterDataViews';
+import { SmartEntitySelect, GlobalSmartDiscoveryModal } from './erp/SmartDiscovery';
 
 const SUPABASE_URL = 'https://jknuhynysewoizjxbidw.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImprbnVoeW55c2V3b2l6anhiaWR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUxODgwMDMsImV4cCI6MjExMDc2NDAwM30.cM0tm_pnvgIN40MYrIB92RR4g4bLvFQx415hvOWuLsU';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// Secondary non-persistent client so Admins can create new Salesman/Team logins without logging themselves out
+const supabaseProvisioner = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+});
 
 const CURRENCIES = ['SAR', 'USD', 'EUR', 'GBP', 'AED'];
 const DEFAULT_FX = { SAR: 1, USD: 3.75, EUR: 4.08, GBP: 4.78, AED: 1.021 };
@@ -30,6 +36,15 @@ const DEFAULT_COMPANY = {
   email: 'info@horizon-ksa.com',
   zatcaPhase2Connected: false,
 };
+
+const ROLE_OPTIONS = [
+  { key: 'sales_mep', label: 'Sales Executive (MEP)', isSalesman: true },
+  { key: 'sales_it', label: 'Sales Executive (IT & ELV)', isSalesman: true },
+  { key: 'manager', label: 'Sales Manager', isSalesman: true },
+  { key: 'procurement', label: 'Procurement & Logistics Officer', isSalesman: false },
+  { key: 'finance', label: 'Finance & ZATCA Accountant', isSalesman: false },
+  { key: 'admin', label: 'System Administrator', isSalesman: false },
+];
 
 const computeQuoteFinancials = (inquiry, fxRates) => {
   const totalCostSAR = (inquiry.boqItems || []).reduce((sum, item) => {
@@ -76,9 +91,7 @@ function LoginLandingPage({ company, onLoginSuccess }) {
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-400/20 text-blue-300 text-[11px] font-semibold uppercase mb-4 sm:mb-8">
             <Building2 className="w-3.5 h-3.5" /> KSA Enterprise Resource Planning (ERP)
           </div>
-          <h1 className="text-2xl sm:text-4xl lg:text-5xl font-bold text-white leading-tight">
-            {company.nameEn}
-          </h1>
+          <h1 className="text-2xl sm:text-4xl lg:text-5xl font-bold text-white leading-tight">{company.nameEn}</h1>
           <p className="text-base sm:text-xl text-blue-300 font-semibold mt-1">{company.nameAr}</p>
           <p className="mt-3 text-sm sm:text-base text-slate-300 max-w-xl leading-relaxed">
             Integrated Master Data, Sales Orders, Partial/Full Deliveries, ZATCA E-Invoicing, Multi-Currency Purchase Cycle &amp; Collection-Based Profit Share.
@@ -160,18 +173,19 @@ export default function App() {
   const [fxRates, setFxRates] = useState(DEFAULT_FX);
   const [syncStatus, setSyncStatus] = useState('connecting');
 
-  // Left Sidebar Navigation State
+  // Navigation & Global Smart Search
   const [activeSubModule, setActiveSubModule] = useState('sales_quotes');
   const [expandedModules, setExpandedModules] = useState({
     sales: true,
     finance: true,
     purchase: true,
-    profit_share: true,
     master_catalog: true,
-    settings: false,
+    profit_share: true,
+    settings: true,
   });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
 
   // Core ERP & Master Data Tables
   const [inquiries, setInquiries] = useState([]);
@@ -185,6 +199,27 @@ export default function App() {
   const [vendors, setVendors] = useState([]);
   const [items, setItems] = useState([]);
   const [customUoms, setCustomUoms] = useState([]);
+
+  // Team / Salesman Creation State
+  const [showNewMemberForm, setShowNewMemberForm] = useState(false);
+  const [memberCreating, setMemberCreating] = useState(false);
+  const [memberFeedback, setMemberFeedback] = useState('');
+  const [newMember, setNewMember] = useState({
+    full_name: '',
+    email: '',
+    password: '',
+    phone: '',
+    role_key: 'sales_mep',
+    division: 'MEP',
+    is_salesman: true,
+    commission_pct: 10,
+  });
+
+  // Inline Quick-Create Modals triggered directly from any "+ Create New" field dropdown
+  const [quickCreateType, setQuickCreateType] = useState(null); // 'customer' | 'vendor' | 'item' | 'salesman'
+  const [quickCust, setQuickCust] = useState({ name_en: '', name_ar: '', customer_type: 'B2B', vat_number: '', cr_number: '', contact_person: '', phone: '', email: '', city: 'Jeddah', address_en: 'Jeddah, KSA' });
+  const [quickVend, setQuickVend] = useState({ name_en: '', vendor_origin: 'KSA', vat_number: '', cr_number: '', contact_person: '', phone: '', email: '', country: 'Saudi Arabia', city: 'Jeddah', address: 'Jeddah', default_currency: 'SAR' });
+  const [quickItem, setQuickItem] = useState({ item_type: 'Goods', name_en: '', name_ar: '', category: 'MEP', uom: 'PCS', sales_price_sar: '', purchase_price: '', purchase_currency: 'SAR', zatca_vat_type: 'S' });
 
   // Modals & Drawers
   const [selectedInqId, setSelectedInqId] = useState(null);
@@ -209,7 +244,6 @@ export default function App() {
   const [deliveryModalSO, setDeliveryModalSO] = useState(null);
   const [deliveryQtys, setDeliveryQtys] = useState({});
   const [deliveryNotesText, setDeliveryNotesText] = useState('');
-
   const [previewInvoice, setPreviewInvoice] = useState(null);
 
   const [paymentModalInv, setPaymentModalInv] = useState(null);
@@ -235,7 +269,7 @@ export default function App() {
 
   const [settingsSavedMsg, setSettingsSavedMsg] = useState('');
 
-  // Hierarchical ERP Navigation Tree with Master Data inside each related module
+  // Hierarchical ERP Navigation Tree
   const navTree = useMemo(
     () => [
       {
@@ -288,11 +322,11 @@ export default function App() {
       },
       {
         id: 'settings',
-        label: '6. Administration & Rules',
+        label: '6. Team & Administration',
         icon: Settings,
         subModules: [
+          { id: 'set_salesmen', label: 'Team & Salesmen Master', icon: UserPlus, count: teamProfiles.length },
           { id: 'set_company', label: 'Company & ZATCA Profile', icon: Sliders },
-          { id: 'set_salesmen', label: 'Salesman Profit Share %', icon: Users, count: teamProfiles.length },
         ],
       },
     ],
@@ -396,7 +430,7 @@ export default function App() {
     refreshAllErpData();
 
     const channel = supabase
-      .channel('horizon-erp-masterdata')
+      .channel('horizon-erp-discovery')
       .on('postgres_changes', { event: '*', schema: 'public' }, () => {
         refreshAllErpData();
       })
@@ -406,8 +440,69 @@ export default function App() {
   }, [session]);
 
   const salesmenList = useMemo(
-    () => teamProfiles.filter((p) => p.is_salesman || ['sales_mep', 'sales_it'].includes(p.role_key)),
+    () => teamProfiles.filter((p) => p.is_salesman || ['sales_mep', 'sales_it', 'manager'].includes(p.role_key)),
     [teamProfiles]
+  );
+
+  // Formatted Options for SmartEntitySelect across every field
+  const customerSelectOptions = useMemo(
+    () =>
+      customers.map((c) => ({
+        id: c.id,
+        badge: c.customer_code,
+        label: c.name_en,
+        sublabel: `${c.name_ar || ''} • ${c.customer_type} • VAT: ${c.vat_number || 'N/A'} • ${c.phone}`,
+        rightMeta: c.city,
+      })),
+    [customers]
+  );
+
+  const vendorSelectOptions = useMemo(
+    () =>
+      vendors.map((v) => ({
+        id: v.id,
+        badge: v.vendor_code,
+        label: v.name_en,
+        sublabel: `${v.vendor_origin} • ${v.contact_person} • ${v.phone}`,
+        rightMeta: v.default_currency,
+      })),
+    [vendors]
+  );
+
+  const itemSelectOptions = useMemo(
+    () =>
+      items.map((it) => ({
+        id: it.id,
+        badge: it.item_code,
+        label: `${it.name_en} (${it.uom})`,
+        sublabel: `${it.name_ar || ''} • ${it.item_type} • ZATCA VAT: ${it.zatca_vat_type}`,
+        rightMeta: `SAR ${formatSAR(it.sales_price_sar)}`,
+      })),
+    [items]
+  );
+
+  const salesmanSelectOptions = useMemo(
+    () =>
+      salesmenList.map((s) => ({
+        id: s.id,
+        badge: s.division || 'SALES',
+        label: s.full_name,
+        sublabel: `${s.role_label} • ${s.email}`,
+        rightMeta: `${s.commission_pct || 0}% Share`,
+      })),
+    [salesmenList]
+  );
+
+  const salesOrderSelectOptions = useMemo(
+    () =>
+      salesOrders.map((so) => ({
+        id: so.id,
+        badge: so.so_number,
+        label: so.client_name,
+        sublabel: `Status: ${so.status} • Salesman: ${so.salesman_name}`,
+        rightMeta: `SAR ${formatSAR(so.grand_total_sar)}`,
+      })),
+    [salesOrders]
   );
 
   const annualTaxableRevenueSAR = useMemo(
@@ -419,7 +514,142 @@ export default function App() {
     [annualTaxableRevenueSAR, company.zatcaPhase2Connected]
   );
 
-  // Auto-fill Inquiry from Customers & Items Master Data
+  // Create New Salesman / Team Member (Provisions Supabase Auth User + team_profiles)
+  const handleCreateTeamMember = async (e) => {
+    e.preventDefault();
+    setMemberCreating(true);
+    setMemberFeedback('');
+    try {
+      const roleMeta = ROLE_OPTIONS.find((r) => r.key === newMember.role_key) || ROLE_OPTIONS[0];
+      const { data: signUpData, error: signUpError } = await supabaseProvisioner.auth.signUp({
+        email: newMember.email.trim(),
+        password: newMember.password,
+        options: {
+          data: { full_name: newMember.full_name.trim() },
+        },
+      });
+
+      if (signUpError) {
+        setMemberFeedback(`Error: ${signUpError.message}`);
+        setMemberCreating(false);
+        return;
+      }
+
+      const createdUserId = signUpData?.user?.id;
+      if (createdUserId) {
+        await supabase.from('team_profiles').upsert({
+          id: createdUserId,
+          email: newMember.email.trim(),
+          full_name: newMember.full_name.trim(),
+          phone: newMember.phone,
+          role_key: roleMeta.key,
+          role_label: roleMeta.label,
+          division: newMember.division,
+          is_salesman: newMember.is_salesman,
+          commission_pct: newMember.is_salesman ? parseFloat(newMember.commission_pct) || 0 : 0,
+          active: true,
+        });
+
+        // Auto-select if triggered from inline "+ Create Salesman" dropdown
+        if (quickCreateType === 'salesman') {
+          setNewInq((prev) => ({ ...prev, salesmanId: createdUserId }));
+          setQuickCreateType(null);
+        }
+      }
+
+      setMemberFeedback(`Created ${newMember.full_name} (${roleMeta.label}) — ready to sign in immediately.`);
+      setShowNewMemberForm(false);
+      setNewMember({
+        full_name: '', email: '', password: '', phone: '',
+        role_key: 'sales_mep', division: 'MEP', is_salesman: true, commission_pct: 10,
+      });
+      refreshAllErpData();
+    } catch (err) {
+      setMemberFeedback(`Failed to create user: ${err.message}`);
+    } finally {
+      setMemberCreating(false);
+    }
+  };
+
+  // Inline Quick-Create Handlers from any "+ Create New" Field Dropdown
+  const handleQuickCreateCustomer = async (e) => {
+    e.preventDefault();
+    const id = `cust-${Date.now()}`;
+    const code = `CUST-${Math.floor(1000 + Math.random() * 8999)}`;
+    await supabase.from('customers').insert({
+      id,
+      customer_code: code,
+      ...quickCust,
+      credit_limit_sar: 50000,
+      payment_terms: 'Net 30',
+    });
+    await refreshAllErpData();
+    setNewInq((prev) => ({
+      ...prev,
+      customerId: id,
+      clientName: quickCust.name_en,
+      clientVat: quickCust.vat_number,
+      contactPerson: quickCust.contact_person,
+      phone: quickCust.phone,
+      email: quickCust.email,
+    }));
+    setQuickCreateType(null);
+  };
+
+  const handleQuickCreateVendor = async (e) => {
+    e.preventDefault();
+    const id = `vend-${Date.now()}`;
+    const code = `VEND-${Math.floor(1000 + Math.random() * 8999)}`;
+    await supabase.from('vendors').insert({
+      id,
+      vendor_code: code,
+      ...quickVend,
+      payment_terms: 'Net 30',
+    });
+    await refreshAllErpData();
+    setNewPO((prev) => ({
+      ...prev,
+      vendorId: id,
+      supplierName: quickVend.name_en,
+      supplierVat: quickVend.vat_number,
+      currency: quickVend.default_currency,
+      fxRate: fxRates[quickVend.default_currency] || 1,
+    }));
+    setQuickCreateType(null);
+  };
+
+  const handleQuickCreateItem = async (e) => {
+    e.preventDefault();
+    const id = `item-${Date.now()}`;
+    const prefix = quickItem.item_type === 'Service' ? 'SRV' : 'ITM';
+    const item_code = `${prefix}-${Math.floor(10000 + Math.random() * 89999)}`;
+    await supabase.from('items').insert({
+      id,
+      item_code,
+      ...quickItem,
+      sales_price_sar: parseFloat(quickItem.sales_price_sar) || 0,
+      purchase_price: parseFloat(quickItem.purchase_price) || 0,
+    });
+    await refreshAllErpData();
+    setNewInq((prev) => ({
+      ...prev,
+      itemId: id,
+      firstItemDesc: `${quickItem.name_en} (${quickItem.name_ar})`,
+      firstItemUom: quickItem.uom,
+      firstItemCost: parseFloat(quickItem.purchase_price) || 0,
+      firstItemCurrency: quickItem.purchase_currency,
+    }));
+    setNewPO((prev) => ({
+      ...prev,
+      itemId: id,
+      itemDesc: `${quickItem.name_en} (${quickItem.uom})`,
+      unitCostFx: parseFloat(quickItem.purchase_price) || 0,
+      currency: quickItem.purchase_currency,
+      fxRate: fxRates[quickItem.purchase_currency] || 1,
+    }));
+    setQuickCreateType(null);
+  };
+
   const handleSelectCustomerForInq = (custId) => {
     const c = customers.find((x) => x.id === custId);
     if (!c) {
@@ -753,7 +983,6 @@ export default function App() {
     refreshAllErpData();
   };
 
-  // Auto-fill PO from Vendors & Items Master Data
   const handleSelectVendorForPO = (vendId) => {
     const v = vendors.find((x) => x.id === vendId);
     if (!v) {
@@ -993,6 +1222,7 @@ export default function App() {
       )}
 
       <div className="flex-1 min-w-0 flex flex-col">
+        {/* TOP HEADER WITH GLOBAL SMART DISCOVERY BAR */}
         <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3 flex items-center justify-between gap-3 sticky top-0 z-20">
           <div className="flex items-center gap-3 min-w-0">
             <button
@@ -1002,16 +1232,28 @@ export default function App() {
             >
               <Menu className="w-5 h-5" />
             </button>
-            <div className="min-w-0">
+            <div className="min-w-0 hidden sm:block">
               <div className="text-xs font-bold text-slate-900 truncate">{company.nameEn}</div>
-              <div className="text-[11px] text-slate-500 truncate">
-                VAT: {company.vatNumber} • CR: {company.crNumber}
-              </div>
+              <div className="text-[11px] text-slate-500 truncate">VAT: {company.vatNumber}</div>
             </div>
           </div>
 
-          <div className="text-right">
-            <div className="text-[10px] uppercase font-semibold text-slate-400">YTD Taxable Sales</div>
+          {/* Global Smart Search & Discovery Trigger */}
+          <button
+            onClick={() => setGlobalSearchOpen(true)}
+            className="flex-1 max-w-md mx-2 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200/80 border border-slate-200 text-slate-500 text-xs flex items-center justify-between gap-2 transition cursor-pointer"
+          >
+            <span className="flex items-center gap-2 truncate">
+              <Search className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+              <span className="truncate">Smart Search: Customers, Vendors, Items, Invoices...</span>
+            </span>
+            <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono bg-white border border-slate-300 rounded text-slate-500">
+              Ctrl K
+            </kbd>
+          </button>
+
+          <div className="text-right shrink-0">
+            <div className="text-[10px] uppercase font-semibold text-slate-400">YTD Sales</div>
             <div className="text-xs sm:text-sm font-bold text-blue-700">SAR {formatSAR(annualTaxableRevenueSAR)}</div>
           </div>
         </header>
@@ -1505,7 +1747,202 @@ export default function App() {
             </div>
           )}
 
-          {/* SUB-MODULE: 6.1 COMPANY SETTINGS */}
+          {/* SUB-MODULE: 6.1 TEAM & SALESMEN MASTER (CREATE NEW SALESMEN & STAFF) */}
+          {activeSubModule === 'set_salesmen' && (
+            <div className="space-y-4 max-w-3xl">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-base sm:text-lg font-bold text-slate-900">Team Members &amp; Salesmen Master</h2>
+                  <p className="text-xs text-slate-500">
+                    Create new Salesmen, Procurement, Finance, or Admin logins and configure their Net Profit Share (%).
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowNewMemberForm(!showNewMemberForm)}
+                  className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <UserPlus className="w-4 h-4" /> {showNewMemberForm ? 'Close Form' : '+ Create Salesman / Team Member'}
+                </button>
+              </div>
+
+              {memberFeedback && (
+                <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-xs font-semibold">
+                  {memberFeedback}
+                </div>
+              )}
+
+              {showNewMemberForm && (
+                <form onSubmit={handleCreateTeamMember} className="bg-white border border-blue-200 rounded-2xl p-5 shadow-sm space-y-4 text-xs">
+                  <div className="font-bold text-sm text-slate-900 border-b border-slate-100 pb-2">
+                    Register New Salesman or Team Member (All Fields Marked *)
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Full Name *</label>
+                      <input
+                        type="text"
+                        required
+                        value={newMember.full_name}
+                        onChange={(e) => setNewMember({ ...newMember, full_name: e.target.value })}
+                        placeholder="e.g. Tariq Al-Harbi"
+                        className="w-full border border-slate-300 rounded-xl px-3 py-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Work Email (Login ID) *</label>
+                      <input
+                        type="email"
+                        required
+                        value={newMember.email}
+                        onChange={(e) => setNewMember({ ...newMember, email: e.target.value })}
+                        placeholder="tariq@horizon-ksa.com"
+                        className="w-full border border-slate-300 rounded-xl px-3 py-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Initial Login Password *</label>
+                      <input
+                        type="text"
+                        required
+                        minLength={6}
+                        value={newMember.password}
+                        onChange={(e) => setNewMember({ ...newMember, password: e.target.value })}
+                        placeholder="Min 6 characters"
+                        className="w-full border border-slate-300 rounded-xl px-3 py-2 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Mobile / WhatsApp</label>
+                      <input
+                        type="tel"
+                        value={newMember.phone}
+                        onChange={(e) => setNewMember({ ...newMember, phone: e.target.value })}
+                        placeholder="+966 5X XXX XXXX"
+                        className="w-full border border-slate-300 rounded-xl px-3 py-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Department / Role *</label>
+                      <select
+                        value={newMember.role_key}
+                        onChange={(e) => {
+                          const r = ROLE_OPTIONS.find((x) => x.key === e.target.value);
+                          setNewMember({
+                            ...newMember,
+                            role_key: e.target.value,
+                            is_salesman: r ? r.isSalesman : false,
+                          });
+                        }}
+                        className="w-full border border-slate-300 rounded-xl px-3 py-2 bg-white font-semibold"
+                      >
+                        {ROLE_OPTIONS.map((r) => (
+                          <option key={r.key} value={r.key}>{r.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Assigned Division *</label>
+                      <select
+                        value={newMember.division}
+                        onChange={(e) => setNewMember({ ...newMember, division: e.target.value })}
+                        className="w-full border border-slate-300 rounded-xl px-3 py-2 bg-white"
+                      >
+                        <option value="MEP">MEP Trading &amp; Contracting</option>
+                        <option value="IT & ELV">IT &amp; ELV Systems</option>
+                        <option value="MEP & IT">All Divisions (MEP &amp; IT)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex flex-wrap items-center justify-between gap-3">
+                    <label className="flex items-center gap-2 font-semibold text-slate-800 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={newMember.is_salesman}
+                        onChange={(e) => setNewMember({ ...newMember, is_salesman: e.target.checked })}
+                        className="w-4 h-4"
+                      />
+                      <span>Eligible as Salesman (Appears in Customer &amp; Inquiry Salesman dropdowns)</span>
+                    </label>
+
+                    {newMember.is_salesman && (
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-slate-600">Net Profit Share %:</span>
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          max="100"
+                          required
+                          value={newMember.commission_pct}
+                          onChange={(e) => setNewMember({ ...newMember, commission_pct: e.target.value })}
+                          className="w-20 border border-slate-300 rounded-lg px-2.5 py-1 text-right font-bold bg-white"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex justify-end gap-2">
+                    <button type="button" onClick={() => setShowNewMemberForm(false)} className="px-4 py-2 rounded-xl border border-slate-300 font-semibold">
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={memberCreating}
+                      className="px-5 py-2 rounded-xl bg-blue-600 text-white font-semibold cursor-pointer"
+                    >
+                      {memberCreating ? 'Creating Account...' : 'Create Team Member'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-3">
+                {teamProfiles.map((member) => (
+                  <div key={member.id} className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm text-slate-900">{member.full_name}</span>
+                        {member.is_salesman && (
+                          <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-700 text-[10px] font-bold">
+                            Salesman
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-slate-500">{member.email} • {member.role_label}</div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(member.is_salesman)}
+                          onChange={(e) => handleUpdateSalesmanRule(member.id, e.target.checked, member.commission_pct)}
+                        />
+                        Salesman
+                      </label>
+
+                      <div className="flex items-center gap-1 bg-white border border-slate-300 rounded-lg px-2 py-1">
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          max="100"
+                          defaultValue={member.commission_pct || 0}
+                          onBlur={(e) => handleUpdateSalesmanRule(member.id, member.is_salesman, e.target.value)}
+                          className="w-14 text-right font-bold text-xs focus:outline-none"
+                        />
+                        <span className="text-xs text-slate-400">%</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* SUB-MODULE: 6.2 COMPANY SETTINGS */}
           {activeSubModule === 'set_company' && (
             <form onSubmit={handleSaveCompanySettings} className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 max-w-2xl">
               <div className="border-b border-slate-100 pb-3">
@@ -1562,57 +1999,32 @@ export default function App() {
               </button>
             </form>
           )}
-
-          {/* SUB-MODULE: 6.2 SALESMAN PROFIT SHARE % */}
-          {activeSubModule === 'set_salesmen' && (
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 max-w-2xl">
-              <div className="border-b border-slate-100 pb-3">
-                <h2 className="text-base font-bold text-slate-900">Team Roles &amp; Salesman Profit Share (%)</h2>
-                <p className="text-xs text-slate-500">
-                  Configure which team members are eligible as Salesmen and set their individual Net Profit Share percentage.
-                </p>
-              </div>
-
-              <div className="space-y-3">
-                {teamProfiles.map((member) => (
-                  <div key={member.id} className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="font-bold text-sm text-slate-900">{member.full_name}</div>
-                      <div className="text-xs text-slate-500">{member.email} • {member.role_label}</div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(member.is_salesman)}
-                          onChange={(e) => handleUpdateSalesmanRule(member.id, e.target.checked, member.commission_pct)}
-                        />
-                        Salesman
-                      </label>
-
-                      <div className="flex items-center gap-1 bg-white border border-slate-300 rounded-lg px-2 py-1">
-                        <input
-                          type="number"
-                          step="0.5"
-                          min="0"
-                          max="100"
-                          defaultValue={member.commission_pct || 0}
-                          onBlur={(e) => handleUpdateSalesmanRule(member.id, member.is_salesman, e.target.value)}
-                          className="w-14 text-right font-bold text-xs focus:outline-none"
-                        />
-                        <span className="text-xs text-slate-400">%</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </main>
       </div>
 
-      {/* INQUIRY BOQ & MULTI-CURRENCY COSTING DRAWER */}
+      {/* GLOBAL SMART SEARCH & DISCOVERY MODAL */}
+      <GlobalSmartDiscoveryModal
+        isOpen={globalSearchOpen}
+        onClose={() => setGlobalSearchOpen(false)}
+        customers={customers}
+        vendors={vendors}
+        items={items}
+        inquiries={inquiries}
+        salesOrders={salesOrders}
+        invoices={invoices}
+        purchaseOrders={purchaseOrders}
+        teamProfiles={teamProfiles}
+        onNavigate={(modId, subId, recordId) => {
+          if (modId === 'OPEN_SEARCH') {
+            setGlobalSearchOpen(true);
+            return;
+          }
+          selectSubModule(modId, subId);
+          if (recordId && subId === 'sales_quotes') setSelectedInqId(recordId);
+        }}
+      />
+
+      {/* INQUIRY BOQ & MULTI-CURRENCY COSTING DRAWER (WITH SMART ITEM PICKER + CREATE NEW) */}
       {selectedInq && (
         <div className="fixed inset-0 bg-slate-950/70 z-50 flex justify-end">
           <div className="bg-white w-full max-w-3xl h-full overflow-y-auto p-5 sm:p-6 space-y-5 shadow-2xl">
@@ -1645,35 +2057,32 @@ export default function App() {
 
               {(selectedInq.boqItems || []).map((item) => (
                 <div key={item.id} className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
-                  {items.length > 0 && (
-                    <select
-                      value={item.itemId || ''}
-                      onChange={(e) => {
-                        const chosen = items.find((x) => x.id === e.target.value);
-                        if (!chosen) return;
-                        saveInquiryPatch(selectedInq, {
-                          boqItems: selectedInq.boqItems.map((b) =>
-                            b.id === item.id
-                              ? {
-                                  ...b,
-                                  itemId: chosen.id,
-                                  desc: `${chosen.name_en} (${chosen.name_ar})`,
-                                  unit: chosen.uom,
-                                  buyCurrency: chosen.purchase_currency,
-                                  buyUnitCost: Number(chosen.purchase_price || 0),
-                                }
-                              : b
-                          ),
-                        });
-                      }}
-                      className="w-full bg-white border border-blue-200 rounded-lg px-2.5 py-1.5 text-blue-800 font-semibold"
-                    >
-                      <option value="">Pick from Items Master (Optional)...</option>
-                      {items.map((it) => (
-                        <option key={it.id} value={it.id}>{it.item_code} — {it.name_en} ({it.uom})</option>
-                      ))}
-                    </select>
-                  )}
+                  <SmartEntitySelect
+                    label="Catalog Item / Service"
+                    placeholder="Search Items Master or create new..."
+                    items={itemSelectOptions}
+                    value={item.itemId || ''}
+                    createNewLabel="Create New Item / Service"
+                    onCreateNew={() => setQuickCreateType('item')}
+                    onChange={(chosenId) => {
+                      const chosen = items.find((x) => x.id === chosenId);
+                      if (!chosen) return;
+                      saveInquiryPatch(selectedInq, {
+                        boqItems: selectedInq.boqItems.map((b) =>
+                          b.id === item.id
+                            ? {
+                                ...b,
+                                itemId: chosen.id,
+                                desc: `${chosen.name_en} (${chosen.name_ar})`,
+                                unit: chosen.uom,
+                                buyCurrency: chosen.purchase_currency,
+                                buyUnitCost: Number(chosen.purchase_price || 0),
+                              }
+                            : b
+                        ),
+                      });
+                    }}
+                  />
                   <input
                     type="text"
                     value={item.desc}
@@ -1765,30 +2174,24 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL: NEW INQUIRY (LINKED TO CUSTOMERS & ITEMS MASTER DATA) */}
+      {/* MODAL: NEW INQUIRY WITH SMART FIELD DROPDOWNS + INLINE "+ CREATE NEW" */}
       {showNewInqModal && (
         <div className="fixed inset-0 bg-slate-950/70 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl max-w-lg w-full p-5 sm:p-6 space-y-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl max-w-lg w-full p-5 sm:p-6 space-y-4 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b pb-3">
               <h3 className="font-bold text-base">New Client Inquiry</h3>
               <button onClick={() => setShowNewInqModal(false)}><X className="w-5 h-5" /></button>
             </div>
             <form onSubmit={handleCreateInquiry} className="space-y-3 text-xs">
-              {customers.length > 0 && (
-                <div>
-                  <label className="block font-semibold text-blue-700 mb-1">Select Registered Customer (or type below)</label>
-                  <select
-                    value={newInq.customerId}
-                    onChange={(e) => handleSelectCustomerForInq(e.target.value)}
-                    className="w-full border border-blue-300 bg-blue-50/40 rounded-xl px-3 py-2.5 font-semibold"
-                  >
-                    <option value="">-- Choose from Customers Master --</option>
-                    {customers.map((c) => (
-                      <option key={c.id} value={c.id}>{c.customer_code} — {c.name_en} ({c.customer_type})</option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              <SmartEntitySelect
+                label="Customer (Search Master or Create New)"
+                placeholder="Search customer name, code, VAT, or phone..."
+                items={customerSelectOptions}
+                value={newInq.customerId}
+                createNewLabel="Create New Customer"
+                onCreateNew={() => setQuickCreateType('customer')}
+                onChange={handleSelectCustomerForInq}
+              />
 
               <input
                 type="text"
@@ -1824,50 +2227,46 @@ export default function App() {
                   className="border border-slate-300 rounded-xl px-3 py-2.5 text-base sm:text-xs"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <select
-                  value={newInq.division}
-                  onChange={(e) => setNewInq({ ...newInq, division: e.target.value })}
-                  className="border border-slate-300 rounded-xl px-3 py-2.5 bg-white text-base sm:text-xs"
-                >
-                  <option value="MEP">MEP Trading</option>
-                  <option value="IT & ELV">IT &amp; ELV</option>
-                </select>
-                <select
-                  required
-                  value={newInq.salesmanId}
-                  onChange={(e) => setNewInq({ ...newInq, salesmanId: e.target.value })}
-                  className="border border-slate-300 rounded-xl px-3 py-2.5 bg-white text-base sm:text-xs"
-                >
-                  <option value="">Assign Salesman Manually...</option>
-                  {salesmenList.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.full_name} ({s.commission_pct || 0}% Share)
-                    </option>
-                  ))}
-                </select>
-              </div>
 
-              {items.length > 0 && (
+              <div className="grid sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-blue-700 mb-1">Select Item / Service from Master Catalog</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Division *</label>
                   <select
-                    value={newInq.itemId}
-                    onChange={(e) => handleSelectItemForInq(e.target.value)}
-                    className="w-full border border-blue-300 bg-blue-50/40 rounded-xl px-3 py-2.5 font-semibold"
+                    value={newInq.division}
+                    onChange={(e) => setNewInq({ ...newInq, division: e.target.value })}
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2.5 bg-white text-base sm:text-xs"
                   >
-                    <option value="">-- Choose from Items Master --</option>
-                    {items.map((it) => (
-                      <option key={it.id} value={it.id}>{it.item_code} — {it.name_en} ({it.uom})</option>
-                    ))}
+                    <option value="MEP">MEP Trading</option>
+                    <option value="IT & ELV">IT &amp; ELV</option>
                   </select>
                 </div>
-              )}
+
+                <SmartEntitySelect
+                  label="Assigned Salesman"
+                  required
+                  placeholder="Search or create salesman..."
+                  items={salesmanSelectOptions}
+                  value={newInq.salesmanId}
+                  createNewLabel="Create New Salesman"
+                  onCreateNew={() => setQuickCreateType('salesman')}
+                  onChange={(val) => setNewInq({ ...newInq, salesmanId: val })}
+                />
+              </div>
+
+              <SmartEntitySelect
+                label="Primary Item / Service (Search Catalog or Create New)"
+                placeholder="Search item code, English/Arabic name..."
+                items={itemSelectOptions}
+                value={newInq.itemId}
+                createNewLabel="Create New Item / Service"
+                onCreateNew={() => setQuickCreateType('item')}
+                onChange={handleSelectItemForInq}
+              />
 
               <input
                 type="text"
                 required
-                placeholder="Primary Item / Scope *"
+                placeholder="Primary Item / Scope Description *"
                 value={newInq.firstItemDesc}
                 onChange={(e) => setNewInq({ ...newInq, firstItemDesc: e.target.value })}
                 className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-base sm:text-xs"
@@ -1877,6 +2276,232 @@ export default function App() {
               </button>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* MODAL: NEW PURCHASE ORDER WITH SMART VENDOR, SO & ITEM DROPDOWNS + "+ CREATE NEW" */}
+      {showNewPOModal && (
+        <div className="fixed inset-0 bg-slate-950/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="font-bold text-base">Create Purchase Order (PO)</h3>
+              <button onClick={() => setShowNewPOModal(false)}><X className="w-5 h-5" /></button>
+            </div>
+            <form onSubmit={handleCreatePO} className="space-y-3 text-xs">
+              <SmartEntitySelect
+                label="Link to Sales Order (Optional)"
+                placeholder="Search SO number or customer..."
+                items={salesOrderSelectOptions}
+                value={newPO.soId}
+                onChange={(val) => setNewPO({ ...newPO, soId: val })}
+              />
+
+              <SmartEntitySelect
+                label="Supplier / Vendor (Search or Create New)"
+                placeholder="Search vendor name, code, currency..."
+                items={vendorSelectOptions}
+                value={newPO.vendorId}
+                createNewLabel="Create New Vendor"
+                onCreateNew={() => setQuickCreateType('vendor')}
+                onChange={handleSelectVendorForPO}
+              />
+
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  type="text"
+                  required
+                  placeholder="Supplier Name *"
+                  value={newPO.supplierName}
+                  onChange={(e) => setNewPO({ ...newPO, supplierName: e.target.value })}
+                  className="border border-slate-300 rounded-xl px-3 py-2.5"
+                />
+                <input
+                  type="text"
+                  placeholder="Supplier VAT No (if KSA)"
+                  value={newPO.supplierVat}
+                  onChange={(e) => setNewPO({ ...newPO, supplierVat: e.target.value })}
+                  className="border border-slate-300 rounded-xl px-3 py-2.5"
+                />
+              </div>
+
+              <SmartEntitySelect
+                label="Item / Service (Search or Create New)"
+                placeholder="Search item code or name..."
+                items={itemSelectOptions}
+                value={newPO.itemId}
+                createNewLabel="Create New Item / Service"
+                onCreateNew={() => setQuickCreateType('item')}
+                onChange={handleSelectItemForPO}
+              />
+
+              <input
+                type="text"
+                required
+                placeholder="Item Description *"
+                value={newPO.itemDesc}
+                onChange={(e) => setNewPO({ ...newPO, itemDesc: e.target.value })}
+                className="w-full border border-slate-300 rounded-xl px-3 py-2.5"
+              />
+              <div className="grid grid-cols-3 gap-2">
+                <input
+                  type="number"
+                  required
+                  placeholder="Qty"
+                  value={newPO.itemQty}
+                  onChange={(e) => setNewPO({ ...newPO, itemQty: e.target.value })}
+                  className="border border-slate-300 rounded-xl px-3 py-2.5"
+                />
+                <select
+                  value={newPO.currency}
+                  onChange={(e) => setNewPO({ ...newPO, currency: e.target.value, fxRate: fxRates[e.target.value] || 1 })}
+                  className="border border-slate-300 rounded-xl px-3 py-2.5 bg-white font-semibold"
+                >
+                  {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  placeholder="Unit Cost (FX)"
+                  value={newPO.unitCostFx}
+                  onChange={(e) => setNewPO({ ...newPO, unitCostFx: e.target.value })}
+                  className="border border-slate-300 rounded-xl px-3 py-2.5"
+                />
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-600 mb-1">Estimated Freight / Customs / Clearance (SAR)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={newPO.landedCostSar}
+                  onChange={(e) => setNewPO({ ...newPO, landedCostSar: e.target.value })}
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2.5"
+                />
+              </div>
+              <button type="submit" className="w-full py-3 rounded-xl bg-blue-600 text-white font-semibold cursor-pointer">
+                Issue Purchase Order
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* INLINE QUICK-CREATE MODALS TRIGGERED FROM ANY "+ CREATE NEW" DROPDOWN */}
+      {quickCreateType === 'customer' && (
+        <div className="fixed inset-0 bg-slate-950/80 z-[60] flex items-center justify-center p-4">
+          <form onSubmit={handleQuickCreateCustomer} className="bg-white rounded-2xl max-w-md w-full p-5 space-y-3 text-xs shadow-2xl">
+            <div className="flex items-center justify-between border-b pb-2">
+              <span className="font-bold text-sm">Quick-Create Customer Master</span>
+              <button type="button" onClick={() => setQuickCreateType(null)}><X className="w-4 h-4" /></button>
+            </div>
+            <input type="text" required placeholder="Company Name (EN) *" value={quickCust.name_en} onChange={(e) => setQuickCust({ ...quickCust, name_en: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2" />
+            <input type="text" dir="rtl" required placeholder="الاسم القانوني بالعربية *" value={quickCust.name_ar} onChange={(e) => setQuickCust({ ...quickCust, name_ar: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2" />
+            <div className="grid grid-cols-2 gap-2">
+              <select value={quickCust.customer_type} onChange={(e) => setQuickCust({ ...quickCust, customer_type: e.target.value })} className="border border-slate-300 rounded-xl px-3 py-2 bg-white">
+                <option value="B2B">B2B (VAT Req)</option>
+                <option value="B2C">B2C (Simplified)</option>
+              </select>
+              <input type="text" maxLength={15} required={quickCust.customer_type === 'B2B'} placeholder="15-Digit VAT *" value={quickCust.vat_number} onChange={(e) => setQuickCust({ ...quickCust, vat_number: e.target.value })} className="border border-slate-300 rounded-xl px-3 py-2 font-mono" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <input type="text" required placeholder="CR Number *" value={quickCust.cr_number} onChange={(e) => setQuickCust({ ...quickCust, cr_number: e.target.value })} className="border border-slate-300 rounded-xl px-3 py-2" />
+              <input type="text" required placeholder="Contact Person *" value={quickCust.contact_person} onChange={(e) => setQuickCust({ ...quickCust, contact_person: e.target.value })} className="border border-slate-300 rounded-xl px-3 py-2" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <input type="tel" required placeholder="Phone *" value={quickCust.phone} onChange={(e) => setQuickCust({ ...quickCust, phone: e.target.value })} className="border border-slate-300 rounded-xl px-3 py-2" />
+              <input type="email" required placeholder="Email *" value={quickCust.email} onChange={(e) => setQuickCust({ ...quickCust, email: e.target.value })} className="border border-slate-300 rounded-xl px-3 py-2" />
+            </div>
+            <button type="submit" className="w-full py-2.5 rounded-xl bg-blue-600 text-white font-semibold cursor-pointer">Save &amp; Select Customer</button>
+          </form>
+        </div>
+      )}
+
+      {quickCreateType === 'vendor' && (
+        <div className="fixed inset-0 bg-slate-950/80 z-[60] flex items-center justify-center p-4">
+          <form onSubmit={handleQuickCreateVendor} className="bg-white rounded-2xl max-w-md w-full p-5 space-y-3 text-xs shadow-2xl">
+            <div className="flex items-center justify-between border-b pb-2">
+              <span className="font-bold text-sm">Quick-Create Vendor / Supplier</span>
+              <button type="button" onClick={() => setQuickCreateType(null)}><X className="w-4 h-4" /></button>
+            </div>
+            <input type="text" required placeholder="Supplier Name (EN) *" value={quickVend.name_en} onChange={(e) => setQuickVend({ ...quickVend, name_en: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2" />
+            <div className="grid grid-cols-2 gap-2">
+              <select value={quickVend.vendor_origin} onChange={(e) => setQuickVend({ ...quickVend, vendor_origin: e.target.value, default_currency: e.target.value === 'KSA' ? 'SAR' : 'USD' })} className="border border-slate-300 rounded-xl px-3 py-2 bg-white">
+                <option value="KSA">KSA Local</option>
+                <option value="International">International</option>
+              </select>
+              <select value={quickVend.default_currency} onChange={(e) => setQuickVend({ ...quickVend, default_currency: e.target.value })} className="border border-slate-300 rounded-xl px-3 py-2 bg-white">
+                {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <input type="text" placeholder="VAT No (if KSA)" value={quickVend.vat_number} onChange={(e) => setQuickVend({ ...quickVend, vat_number: e.target.value })} className="border border-slate-300 rounded-xl px-3 py-2 font-mono" />
+              <input type="text" required placeholder="CR / Reg No *" value={quickVend.cr_number} onChange={(e) => setQuickVend({ ...quickVend, cr_number: e.target.value })} className="border border-slate-300 rounded-xl px-3 py-2" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <input type="text" required placeholder="Contact Person *" value={quickVend.contact_person} onChange={(e) => setQuickVend({ ...quickVend, contact_person: e.target.value })} className="border border-slate-300 rounded-xl px-3 py-2" />
+              <input type="tel" required placeholder="Phone *" value={quickVend.phone} onChange={(e) => setQuickVend({ ...quickVend, phone: e.target.value })} className="border border-slate-300 rounded-xl px-3 py-2" />
+            </div>
+            <button type="submit" className="w-full py-2.5 rounded-xl bg-blue-600 text-white font-semibold cursor-pointer">Save &amp; Select Vendor</button>
+          </form>
+        </div>
+      )}
+
+      {quickCreateType === 'item' && (
+        <div className="fixed inset-0 bg-slate-950/80 z-[60] flex items-center justify-center p-4">
+          <form onSubmit={handleQuickCreateItem} className="bg-white rounded-2xl max-w-md w-full p-5 space-y-3 text-xs shadow-2xl">
+            <div className="flex items-center justify-between border-b pb-2">
+              <span className="font-bold text-sm">Quick-Create Item / Service (ZATCA)</span>
+              <button type="button" onClick={() => setQuickCreateType(null)}><X className="w-4 h-4" /></button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <select value={quickItem.item_type} onChange={(e) => setQuickItem({ ...quickItem, item_type: e.target.value })} className="border border-slate-300 rounded-xl px-3 py-2 bg-white font-bold">
+                <option value="Goods">Goods</option>
+                <option value="Service">Service</option>
+              </select>
+              <select value={quickItem.uom} onChange={(e) => setQuickItem({ ...quickItem, uom: e.target.value })} className="border border-slate-300 rounded-xl px-3 py-2 bg-white">
+                {[...STANDARD_UOMS, ...customUoms].map((u) => <option key={u.code} value={u.code}>{u.label}</option>)}
+              </select>
+            </div>
+            <input type="text" required placeholder="Description (English) *" value={quickItem.name_en} onChange={(e) => setQuickItem({ ...quickItem, name_en: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2" />
+            <input type="text" dir="rtl" required placeholder="الوصف بالعربية *" value={quickItem.name_ar} onChange={(e) => setQuickItem({ ...quickItem, name_ar: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2" />
+            <div className="grid grid-cols-2 gap-2">
+              <input type="number" step="0.01" required placeholder="Sales Price (SAR) *" value={quickItem.sales_price_sar} onChange={(e) => setQuickItem({ ...quickItem, sales_price_sar: e.target.value })} className="border border-slate-300 rounded-xl px-3 py-2" />
+              <div className="flex gap-1">
+                <select value={quickItem.purchase_currency} onChange={(e) => setQuickItem({ ...quickItem, purchase_currency: e.target.value })} className="border border-slate-300 rounded-xl px-2 py-2 bg-white">
+                  {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <input type="number" step="0.01" required placeholder="Cost *" value={quickItem.purchase_price} onChange={(e) => setQuickItem({ ...quickItem, purchase_price: e.target.value })} className="w-full border border-slate-300 rounded-xl px-2.5 py-2" />
+              </div>
+            </div>
+            <select value={quickItem.zatca_vat_type} onChange={(e) => setQuickItem({ ...quickItem, zatca_vat_type: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2 bg-white">
+              {ZATCA_VAT_TYPES.map((v) => <option key={v.code} value={v.code}>{v.label}</option>)}
+            </select>
+            <button type="submit" className="w-full py-2.5 rounded-xl bg-blue-600 text-white font-semibold cursor-pointer">Save &amp; Select Item</button>
+          </form>
+        </div>
+      )}
+
+      {quickCreateType === 'salesman' && (
+        <div className="fixed inset-0 bg-slate-950/80 z-[60] flex items-center justify-center p-4">
+          <form onSubmit={handleCreateTeamMember} className="bg-white rounded-2xl max-w-md w-full p-5 space-y-3 text-xs shadow-2xl">
+            <div className="flex items-center justify-between border-b pb-2">
+              <span className="font-bold text-sm">Quick-Create Salesman Account</span>
+              <button type="button" onClick={() => setQuickCreateType(null)}><X className="w-4 h-4" /></button>
+            </div>
+            <input type="text" required placeholder="Salesman Full Name *" value={newMember.full_name} onChange={(e) => setNewMember({ ...newMember, full_name: e.target.value, is_salesman: true })} className="w-full border border-slate-300 rounded-xl px-3 py-2" />
+            <input type="email" required placeholder="Work Email (Login ID) *" value={newMember.email} onChange={(e) => setNewMember({ ...newMember, email: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2" />
+            <input type="text" required minLength={6} placeholder="Initial Password (Min 6 chars) *" value={newMember.password} onChange={(e) => setNewMember({ ...newMember, password: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2 font-mono" />
+            <div className="grid grid-cols-2 gap-2">
+              <select value={newMember.division} onChange={(e) => setNewMember({ ...newMember, division: e.target.value })} className="border border-slate-300 rounded-xl px-3 py-2 bg-white">
+                <option value="MEP">MEP Division</option>
+                <option value="IT & ELV">IT &amp; ELV Division</option>
+              </select>
+              <input type="number" step="0.5" min="0" max="100" required placeholder="Profit Share % *" value={newMember.commission_pct} onChange={(e) => setNewMember({ ...newMember, commission_pct: e.target.value })} className="border border-slate-300 rounded-xl px-3 py-2" />
+            </div>
+            <button type="submit" disabled={memberCreating} className="w-full py-2.5 rounded-xl bg-blue-600 text-white font-semibold cursor-pointer">
+              {memberCreating ? 'Creating...' : 'Create & Select Salesman'}
+            </button>
+          </form>
         </div>
       )}
 
@@ -2058,128 +2683,6 @@ export default function App() {
               </div>
               <button type="submit" className="w-full py-3 rounded-xl bg-emerald-600 text-white font-semibold cursor-pointer">
                 Post Receipt &amp; Unlock Sales Profit Share
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: NEW PURCHASE ORDER (LINKED TO VENDORS & ITEMS MASTER DATA) */}
-      {showNewPOModal && (
-        <div className="fixed inset-0 bg-slate-950/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4">
-            <div className="flex items-center justify-between border-b pb-3">
-              <h3 className="font-bold text-base">Create Purchase Order (PO)</h3>
-              <button onClick={() => setShowNewPOModal(false)}><X className="w-5 h-5" /></button>
-            </div>
-            <form onSubmit={handleCreatePO} className="space-y-3 text-xs">
-              <select
-                value={newPO.soId}
-                onChange={(e) => setNewPO({ ...newPO, soId: e.target.value })}
-                className="w-full border border-slate-300 rounded-xl px-3 py-2.5 bg-white"
-              >
-                <option value="">Link to Sales Order (Optional - Back-to-Back)</option>
-                {salesOrders.map((s) => (
-                  <option key={s.id} value={s.id}>{s.so_number} — {s.client_name}</option>
-                ))}
-              </select>
-
-              {vendors.length > 0 && (
-                <div>
-                  <label className="block font-semibold text-blue-700 mb-1">Select Registered Vendor (or enter below)</label>
-                  <select
-                    value={newPO.vendorId}
-                    onChange={(e) => handleSelectVendorForPO(e.target.value)}
-                    className="w-full border border-blue-300 bg-blue-50/40 rounded-xl px-3 py-2.5 font-semibold"
-                  >
-                    <option value="">-- Choose from Vendors Master --</option>
-                    {vendors.map((v) => (
-                      <option key={v.id} value={v.id}>{v.vendor_code} — {v.name_en} ({v.default_currency})</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  type="text"
-                  required
-                  placeholder="Supplier Name *"
-                  value={newPO.supplierName}
-                  onChange={(e) => setNewPO({ ...newPO, supplierName: e.target.value })}
-                  className="border border-slate-300 rounded-xl px-3 py-2.5"
-                />
-                <input
-                  type="text"
-                  placeholder="Supplier VAT No (if KSA)"
-                  value={newPO.supplierVat}
-                  onChange={(e) => setNewPO({ ...newPO, supplierVat: e.target.value })}
-                  className="border border-slate-300 rounded-xl px-3 py-2.5"
-                />
-              </div>
-
-              {items.length > 0 && (
-                <div>
-                  <label className="block font-semibold text-blue-700 mb-1">Select Item / Service from Master Catalog</label>
-                  <select
-                    value={newPO.itemId}
-                    onChange={(e) => handleSelectItemForPO(e.target.value)}
-                    className="w-full border border-blue-300 bg-blue-50/40 rounded-xl px-3 py-2.5 font-semibold"
-                  >
-                    <option value="">-- Choose from Items Master --</option>
-                    {items.map((it) => (
-                      <option key={it.id} value={it.id}>{it.item_code} — {it.name_en} ({it.purchase_currency} {it.purchase_price})</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              <input
-                type="text"
-                required
-                placeholder="Item Description *"
-                value={newPO.itemDesc}
-                onChange={(e) => setNewPO({ ...newPO, itemDesc: e.target.value })}
-                className="w-full border border-slate-300 rounded-xl px-3 py-2.5"
-              />
-              <div className="grid grid-cols-3 gap-2">
-                <input
-                  type="number"
-                  required
-                  placeholder="Qty"
-                  value={newPO.itemQty}
-                  onChange={(e) => setNewPO({ ...newPO, itemQty: e.target.value })}
-                  className="border border-slate-300 rounded-xl px-3 py-2.5"
-                />
-                <select
-                  value={newPO.currency}
-                  onChange={(e) => setNewPO({ ...newPO, currency: e.target.value, fxRate: fxRates[e.target.value] || 1 })}
-                  className="border border-slate-300 rounded-xl px-3 py-2.5 bg-white font-semibold"
-                >
-                  {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <input
-                  type="number"
-                  step="0.01"
-                  required
-                  placeholder="Unit Cost (FX)"
-                  value={newPO.unitCostFx}
-                  onChange={(e) => setNewPO({ ...newPO, unitCostFx: e.target.value })}
-                  className="border border-slate-300 rounded-xl px-3 py-2.5"
-                />
-              </div>
-              <div>
-                <label className="block font-semibold text-slate-600 mb-1">Estimated Freight / Customs / Clearance (SAR)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={newPO.landedCostSar}
-                  onChange={(e) => setNewPO({ ...newPO, landedCostSar: e.target.value })}
-                  className="w-full border border-slate-300 rounded-xl px-3 py-2.5"
-                />
-              </div>
-              <button type="submit" className="w-full py-3 rounded-xl bg-blue-600 text-white font-semibold cursor-pointer">
-                Issue Purchase Order
               </button>
             </form>
           </div>
