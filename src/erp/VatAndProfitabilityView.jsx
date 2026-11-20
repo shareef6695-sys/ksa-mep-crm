@@ -164,58 +164,122 @@ export function ZatcaVatReturnView({ company, invoices, creditNotes, purchaseOrd
   );
 }
 
-export function DealProfitabilityView({ invoices, creditNotes, commissions, supplierPayments }) {
-  const dealRows = useMemo(() => {
-    return invoices.map((inv) => {
-      const linkedCNs = creditNotes.filter((c) => c.original_invoice_id === inv.id);
-      const cnSubtotal = linkedCNs.reduce((s, c) => s + Number(c.subtotal_sar || 0), 0);
-      const cnCost = linkedCNs.reduce((s, c) => s + Number(c.landed_cost_reversed_sar || 0), 0);
+export function DealProfitabilityView({ invoices, creditNotes, commissions, supplierPayments, salesOrders = [] }) {
+  const [divisionFilter, setDivisionFilter] = useState('ALL'); // ALL | MEP | IT
 
-      const netRevenueSar = Number(inv.subtotal_sar || 0);
-      const grossCostSar = (inv.items || []).reduce(
-        (s, it) => s + (Number(it.qty) || 0) * (Number(it.unitCostSar) || 0),
-        0
-      );
-      const netCostSar = Math.max(0, grossCostSar - cnCost);
-
-      const comm = commissions.find((c) => c.invoice_id === inv.id);
-      const commissionSar = Number(comm?.total_eligible_commission_sar || 0);
-
-      const grossProfitSar = netRevenueSar - netCostSar;
-      const netProfitAfterCommSar = grossProfitSar - commissionSar;
-      const marginPct = netRevenueSar > 0 ? (netProfitAfterCommSar / netRevenueSar) * 100 : 0;
-
-      return {
-        invoiceNumber: inv.invoice_number,
-        soNumber: inv.so_number || 'Direct',
-        clientName: inv.client_name,
-        salesman: comm?.salesman_name || 'House Account',
-        netRevenueSar,
-        netCostSar,
-        commissionSar,
-        netProfitAfterCommSar,
-        marginPct,
-        hasReturns: cnSubtotal > 0,
-      };
+  const soDivisionMap = useMemo(() => {
+    const map = {};
+    salesOrders.forEach((so) => {
+      if (so.so_number) map[so.so_number] = so.division || 'MEP';
     });
-  }, [invoices, creditNotes, commissions]);
+    return map;
+  }, [salesOrders]);
+
+  const dealRows = useMemo(() => {
+    return invoices
+      .map((inv) => {
+        const rawDiv = inv.division || soDivisionMap[inv.so_number] || 'MEP';
+        const isIt = String(rawDiv).toUpperCase().includes('IT');
+        const normalizedDiv = isIt ? 'IT & ELV' : 'MEP';
+
+        const linkedCNs = creditNotes.filter((c) => c.original_invoice_id === inv.id);
+        const cnSubtotal = linkedCNs.reduce((s, c) => s + Number(c.subtotal_sar || 0), 0);
+        const cnCost = linkedCNs.reduce((s, c) => s + Number(c.landed_cost_reversed_sar || 0), 0);
+
+        const netRevenueSar = Number(inv.subtotal_sar || 0);
+        const grossCostSar = (inv.items || []).reduce(
+          (s, it) => s + (Number(it.qty) || 0) * (Number(it.unitCostSar) || 0),
+          0
+        );
+        const netCostSar = Math.max(0, grossCostSar - cnCost);
+
+        const comm = commissions.find((c) => c.invoice_id === inv.id);
+        const commissionSar = Number(comm?.total_eligible_commission_sar || 0);
+
+        const grossProfitSar = netRevenueSar - netCostSar;
+        const netProfitAfterCommSar = grossProfitSar - commissionSar;
+        const marginPct = netRevenueSar > 0 ? (netProfitAfterCommSar / netRevenueSar) * 100 : 0;
+
+        return {
+          invoiceNumber: inv.invoice_number,
+          soNumber: inv.so_number || 'Direct',
+          division: normalizedDiv,
+          isIt,
+          clientName: inv.client_name,
+          salesman: comm?.salesman_name || 'House Account',
+          netRevenueSar,
+          netCostSar,
+          commissionSar,
+          netProfitAfterCommSar,
+          marginPct,
+          hasReturns: cnSubtotal > 0,
+        };
+      })
+      .filter((row) => {
+        if (divisionFilter === 'ALL') return true;
+        if (divisionFilter === 'IT') return row.isIt;
+        return !row.isIt;
+      });
+  }, [invoices, creditNotes, commissions, soDivisionMap, divisionFilter]);
 
   const totals = useMemo(() => {
     const rev = dealRows.reduce((s, r) => s + r.netRevenueSar, 0);
     const cost = dealRows.reduce((s, r) => s + r.netCostSar, 0);
     const comm = dealRows.reduce((s, r) => s + r.commissionSar, 0);
-    const fxLoss = supplierPayments.reduce((s, p) => s + Number(p.fx_variance_sar || 0), 0);
+    const fxLoss =
+      divisionFilter === 'ALL'
+        ? supplierPayments.reduce((s, p) => s + Number(p.fx_variance_sar || 0), 0)
+        : 0;
     const net = rev - cost - comm - fxLoss;
-    return { rev, cost, comm, fxLoss, net };
-  }, [dealRows, supplierPayments]);
+    const overallMarginPct = rev > 0 ? (net / rev) * 100 : 0;
+    return { rev, cost, comm, fxLoss, net, overallMarginPct };
+  }, [dealRows, supplierPayments, divisionFilter]);
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-base sm:text-lg font-bold text-slate-900">Deal &amp; Sales Order Profitability P&amp;L Report</h2>
-        <p className="text-xs text-slate-500">
-          True net margin per transaction after deducting COGS, Credit Note returns, Salesman Profit Share, and realized FX variance.
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-base sm:text-lg font-bold text-slate-900">
+            Deal &amp; Sales Order Profitability P&amp;L Report
+          </h2>
+          <p className="text-xs text-slate-500">
+            Compare net margins across MEP Contracting and IT &amp; ELV Solutions after COGS, returns, and sales profit share.
+          </p>
+        </div>
+
+        {/* Division Filter Segmented Control */}
+        <div className="inline-flex rounded-xl bg-slate-100 p-1 border border-slate-200 text-xs font-bold">
+          <button
+            onClick={() => setDivisionFilter('ALL')}
+            className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+              divisionFilter === 'ALL'
+                ? 'bg-slate-900 text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            All Divisions
+          </button>
+          <button
+            onClick={() => setDivisionFilter('MEP')}
+            className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+              divisionFilter === 'MEP'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            MEP Division
+          </button>
+          <button
+            onClick={() => setDivisionFilter('IT')}
+            className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+              divisionFilter === 'IT'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            IT &amp; ELV Division
+          </button>
+        </div>
       </div>
 
       {/* Executive P&L Strip */}
@@ -233,11 +297,20 @@ export function DealProfitabilityView({ invoices, creditNotes, commissions, supp
           <div className="text-base sm:text-lg font-bold text-blue-700 mt-1">SAR {formatSAR(totals.comm)}</div>
         </div>
         <div className="bg-white border border-slate-200 rounded-2xl p-4">
-          <div className="text-slate-500">Realized FX Diff</div>
-          <div className="text-base sm:text-lg font-bold text-slate-700 mt-1">SAR {formatSAR(totals.fxLoss)}</div>
+          <div className="text-slate-500">
+            {divisionFilter === 'ALL' ? 'Realized FX Diff' : 'Division Net Margin'}
+          </div>
+          <div className="text-base sm:text-lg font-bold text-slate-800 mt-1">
+            {divisionFilter === 'ALL'
+              ? `SAR ${formatSAR(totals.fxLoss)}`
+              : `${totals.overallMarginPct.toFixed(1)}%`}
+          </div>
         </div>
         <div className="bg-emerald-900 text-white rounded-2xl p-4 col-span-2 lg:col-span-1">
-          <div className="text-emerald-200">Net Company Profit</div>
+          <div className="text-emerald-200 flex items-center justify-between">
+            <span>Net Profit</span>
+            <span className="font-mono font-bold text-emerald-300">{totals.overallMarginPct.toFixed(1)}%</span>
+          </div>
           <div className="text-base sm:text-lg font-bold mt-1">SAR {formatSAR(totals.net)}</div>
         </div>
       </div>
@@ -245,13 +318,14 @@ export function DealProfitabilityView({ invoices, creditNotes, commissions, supp
       <div className="bg-white border border-slate-200 rounded-2xl overflow-x-auto shadow-sm">
         {dealRows.length === 0 ? (
           <div className="p-10 text-center text-sm text-slate-500">
-            No posted ZATCA Invoices yet. Deal profitability updates live as invoices, credit notes, and supplier payments post.
+            No posted ZATCA Invoices found for{' '}
+            <strong>{divisionFilter === 'ALL' ? 'any division' : divisionFilter === 'IT' ? 'IT & ELV' : 'MEP'}</strong>.
           </div>
         ) : (
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
               <tr>
-                <th className="p-3">Invoice / SO</th>
+                <th className="p-3">Invoice / SO &amp; Division</th>
                 <th className="p-3">Customer &amp; Salesman</th>
                 <th className="p-3 text-right">Net Revenue</th>
                 <th className="p-3 text-right">Landed COGS</th>
@@ -264,8 +338,17 @@ export function DealProfitabilityView({ invoices, creditNotes, commissions, supp
               {dealRows.map((r, i) => (
                 <tr key={i} className="hover:bg-slate-50/70">
                   <td className="p-3">
-                    <div className="font-mono font-bold text-blue-700">{r.invoiceNumber}</div>
-                    <div className="text-[11px] font-mono text-slate-400">{r.soNumber}</div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono font-bold text-blue-700">{r.invoiceNumber}</span>
+                      <span
+                        className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
+                          r.isIt ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'
+                        }`}
+                      >
+                        {r.division}
+                      </span>
+                    </div>
+                    <div className="text-[11px] font-mono text-slate-400 mt-0.5">{r.soNumber}</div>
                   </td>
                   <td className="p-3">
                     <div className="font-bold text-slate-900">{r.clientName}</div>
@@ -274,7 +357,11 @@ export function DealProfitabilityView({ invoices, creditNotes, commissions, supp
                   <td className="p-3 text-right font-semibold">SAR {formatSAR(r.netRevenueSar)}</td>
                   <td className="p-3 text-right text-slate-600">SAR {formatSAR(r.netCostSar)}</td>
                   <td className="p-3 text-right text-blue-700">SAR {formatSAR(r.commissionSar)}</td>
-                  <td className={`p-3 text-right font-bold ${r.netProfitAfterCommSar >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                  <td
+                    className={`p-3 text-right font-bold ${
+                      r.netProfitAfterCommSar >= 0 ? 'text-emerald-700' : 'text-rose-600'
+                    }`}
+                  >
                     SAR {formatSAR(r.netProfitAfterCommSar)}
                   </td>
                   <td className="p-3 text-right">
