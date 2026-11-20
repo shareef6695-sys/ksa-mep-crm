@@ -11,6 +11,7 @@ import { generateZatcaQrBase64, getZatcaComplianceAdvice, formatSAR } from './er
 import { CustomersMasterView, VendorsMasterView, ItemsMasterView, STANDARD_UOMS, ZATCA_VAT_TYPES } from './erp/MasterDataViews';
 import { SmartEntitySelect, GlobalSmartDiscoveryModal } from './erp/SmartDiscovery';
 import { NumberRangesView } from './erp/NumberRangesView';
+import { CreditNotesView } from './erp/CreditNotesView';
 
 const SUPABASE_URL = 'https://jknuhynysewoizjxbidw.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImprbnVoeW55c2V3b2l6anhiaWR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUxODgwMDMsImV4cCI6MjExMDc2NDAwM30.cM0tm_pnvgIN40MYrIB92RR4g4bLvFQx415hvOWuLsU';
@@ -201,6 +202,7 @@ export default function App() {
   const [items, setItems] = useState([]);
   const [customUoms, setCustomUoms] = useState([]);
   const [numberRanges, setNumberRanges] = useState([]);
+  const [creditNotes, setCreditNotes] = useState([]);
 
   // Team / Salesman Creation State
   const [showNewMemberForm, setShowNewMemberForm] = useState(false);
@@ -284,6 +286,7 @@ export default function App() {
           { id: 'sales_orders', label: 'Sales Orders (SO)', icon: ShoppingBag, count: salesOrders.length },
           { id: 'sales_deliveries', label: 'Deliveries (Full/Partial)', icon: Truck, count: deliveryNotes.length },
           { id: 'sales_invoices', label: 'ZATCA Invoices', icon: Receipt, count: invoices.length },
+          { id: 'sales_credit_notes', label: 'ZATCA Credit Notes', icon: FileText, count: creditNotes.length },
         ],
       },
       {
@@ -333,7 +336,7 @@ export default function App() {
         ],
       },
     ],
-    [customers.length, inquiries.length, salesOrders.length, deliveryNotes.length, invoices.length, receipts.length, vendors.length, purchaseOrders, items.length, commissions.length, teamProfiles.length, numberRanges.length]
+    [customers.length, inquiries.length, salesOrders.length, deliveryNotes.length, invoices.length, receipts.length, vendors.length, purchaseOrders, items.length, commissions.length, teamProfiles.length, numberRanges.length, creditNotes.length]
   );
 
   const toggleMainModule = (modId) => {
@@ -392,6 +395,7 @@ export default function App() {
       itemRes,
       uomRes,
       rangeRes,
+      cnRes,
     ] = await Promise.all([
       supabase.from('app_settings').select('*'),
       supabase.from('inquiries').select('*').order('updated_at', { ascending: false }),
@@ -407,6 +411,7 @@ export default function App() {
       supabase.from('items').select('*').order('name_en'),
       supabase.from('custom_uoms').select('*').order('code'),
       supabase.from('document_number_ranges').select('*').order('doc_type'),
+      supabase.from('credit_notes').select('*').order('issued_at', { ascending: false }),
     ]);
 
     if (settingsRes.data) {
@@ -428,6 +433,7 @@ export default function App() {
     if (itemRes.data) setItems(itemRes.data);
     if (uomRes.data) setCustomUoms(uomRes.data);
     if (rangeRes.data) setNumberRanges(rangeRes.data);
+    if (cnRes.data) setCreditNotes(cnRes.data);
     setSyncStatus('live');
   };
 
@@ -1493,6 +1499,8 @@ export default function App() {
               )}
             </div>
           )}
+
+          {activeSubModule === 'sales_credit_notes' && (<CreditNotesView supabase={supabase} company={company} invoices={invoices} creditNotes={creditNotes} commissions={commissions} profile={profile} onRefresh={refreshAllErpData} />)}
 
           {/* SUB-MODULE: 1.5 ZATCA INVOICES */}
           {activeSubModule === 'sales_invoices' && (
