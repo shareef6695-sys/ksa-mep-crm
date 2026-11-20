@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { FileSpreadsheet, Printer, TrendingUp, ShieldCheck } from 'lucide-react';
 import { formatSAR } from './erpEngine';
+import { downloadCsvFile } from './csvExport';
 
 function getQuarterKey(dateStr) {
   const d = dateStr ? new Date(dateStr) : new Date();
@@ -88,8 +89,8 @@ export function ZatcaVatReturnView({ company, invoices, creditNotes, purchaseOrd
             ))}
           </select>
 
-          <button
-            onClick={() => window.print()}
+          <button onClick={() => downloadCsvFile(ZATCA_VAT_Return_.csv, ['ZATCA Return Line Item', 'Taxable Amount (SAR)', 'Adjustment (SAR)', 'VAT Amount 15% (SAR)'], [['1. Standard-Rated Sales (15%)', vatSummary.grossSalesBase.toFixed(2), (-vatSummary.cnBase).toFixed(2), vatSummary.grossSalesVat.toFixed(2)], ['2. Less: ZATCA Credit Notes / Sales Returns', (-vatSummary.cnBase).toFixed(2), '0.00', (-vatSummary.cnVat).toFixed(2)], ['3. Total Output VAT Due (Net Sales VAT)', vatSummary.netSalesBase.toFixed(2), '0.00', vatSummary.netSalesVat.toFixed(2)], ['4. Standard-Rated Purchases Input VAT (15%)', vatSummary.recoverablePurchaseBase.toFixed(2), '0.00', (-vatSummary.inputVatRecoverable).toFixed(2)], ['5. NET VAT PAYABLE TO ZATCA', '', '', vatSummary.netVatPayable.toFixed(2)]])} className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold cursor-pointer">Export Excel / CSV</button>
+          <button onClick={() => window.print()}
             className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-blue-600 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
           >
             <Printer className="w-4 h-4" /> Print VAT Return

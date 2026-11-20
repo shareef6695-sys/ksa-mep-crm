@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { BookOpen, Plus, Trash2, CheckCircle2, AlertTriangle, X, Scale } from 'lucide-react';
 import { formatSAR } from './erpEngine';
+import { downloadCsvFile } from './csvExport';
 
 export function GeneralLedgerView({
   supabase,
@@ -304,10 +305,15 @@ export function GeneralLedgerView({
             </tbody>
           </table>
         </div>
+        </div>
       )}
 
       {/* TAB 3: TRIAL BALANCE */}
       {tab === 'trial' && (
+        <div className="space-y-3">
+          <div className="flex justify-end">
+            <button onClick={() => downloadCsvFile(Trial_Balance_.csv, ['Account Code', 'Account Name', 'Type', 'Total Debit (SAR)', 'Total Credit (SAR)', 'Net Balance (SAR)'], [...trialBalance.rows.map((r) => [r.account_code, r.account_name_en, r.account_type, r.totalDr.toFixed(2), r.totalCr.toFixed(2), (r.totalDr - r.totalCr).toFixed(2)]), ['', 'TRIAL BALANCE TOTALS', '', trialBalance.grandDr.toFixed(2), trialBalance.grandCr.toFixed(2), (trialBalance.grandDr - trialBalance.grandCr).toFixed(2)]])} className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold cursor-pointer">Export Trial Balance (Excel / CSV)</button>
+          </div>
         <div className="bg-white border border-slate-200 rounded-2xl overflow-x-auto shadow-sm">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
@@ -346,6 +352,7 @@ export function GeneralLedgerView({
               </tr>
             </tbody>
           </table>
+        </div>
         </div>
       )}
 

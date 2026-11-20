@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Banknote, Plus, Clock, AlertCircle, CheckCircle2, X, ArrowRightLeft } from 'lucide-react';
 import { formatSAR } from './erpEngine';
+import { downloadCsvFile } from './csvExport';
 import { postAutoJournal } from './glEngine';
 
 function getDaysOld(dateStr) {
@@ -426,8 +427,8 @@ export function AgingReportView({ invoices, purchaseOrders }) {
               ledgerSide === 'ap' ? 'bg-amber-700 text-white' : 'bg-white border border-slate-200 text-slate-700'
             }`}
           >
-            Accounts Payable (AP) ({apRows.length})
-          </button>
+            Accounts Payable (AP) ({apRows.length})</button>
+          <button onClick={() => downloadCsvFile(${ledgerSide.toUpperCase()}_Aging_Report_.csv, ['Document #', ledgerSide === 'ar' ? 'Customer' : 'Supplier', 'Age (Days)', 'Aging Bucket', 'Original (SAR)', 'Settled (SAR)', 'Open Balance (SAR)'], activeRows.map((r) => [r.docNum, r.party, r.days, r.bucket + ' Days', r.totalSar.toFixed(2), r.paidSar.toFixed(2), r.balanceSar.toFixed(2)]))} className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold cursor-pointer">Export Excel / CSV</button>
         </div>
       </div>
 
