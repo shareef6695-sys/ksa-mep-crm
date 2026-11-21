@@ -417,7 +417,7 @@ begin
 end;
 $$;
 
-revoke all on function public.next_doc_number(text) from public;
+revoke all on function public.next_doc_number(text) from public, anon;
 grant execute on function public.next_doc_number(text) to authenticated;
 
 insert into public.document_number_ranges (doc_type, label, prefix, include_year, padding, next_number, reset_annually) values
