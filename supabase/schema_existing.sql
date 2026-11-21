@@ -608,3 +608,6 @@ end $$;
 -- [ ] Number format: prefix is stored without '-'; function returns
 --     PREFIX-YYYY-NNNNN or PREFIX-NNNNN, the same as NumberRangesView preview.
 -- =====================================================================
+
+-- Refresh the Supabase API schema cache so the app sees the new tables immediately
+notify pgrst, 'reload schema';

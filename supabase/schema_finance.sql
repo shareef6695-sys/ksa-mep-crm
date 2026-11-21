@@ -103,3 +103,6 @@ begin
     end if;
   end loop;
 end $$;
+
+-- Refresh the Supabase API schema cache so the app sees the new tables immediately
+notify pgrst, 'reload schema';
