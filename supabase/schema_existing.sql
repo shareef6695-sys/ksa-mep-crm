@@ -52,7 +52,7 @@ create table if not exists public.customers (
   address_ar            text,
   credit_limit_sar      numeric(18,2) default 0,
   payment_terms         text default 'Net 30',
-  assigned_salesman_id  uuid,                         -- team_profiles.id (auth user id)
+  assigned_salesman_id  text,                         -- team_profiles.id (auth user id)
   created_at            timestamptz default now(),
   updated_at            timestamptz default now()
 );
@@ -128,7 +128,7 @@ create table if not exists public.sales_orders (
   phone             text,
   email             text,
   payment_terms     text,
-  salesman_id       uuid,
+  salesman_id       text,
   salesman_name     text,
   commission_pct    numeric(7,4) default 0,
   status            text default 'open',              -- open | partially_delivered | delivered
@@ -170,7 +170,7 @@ create table if not exists public.invoices (
   dn_id             text,
   client_name       text,
   client_vat        text,
-  salesman_id       uuid,
+  salesman_id       text,
   salesman_name     text,
   commission_pct    numeric(7,4) default 0,
   items             jsonb default '[]'::jsonb,
@@ -228,7 +228,7 @@ create table if not exists public.commission_ledger (
   invoice_number                  text,
   division                        text default 'MEP',
   client_name                     text,
-  salesman_id                     uuid,
+  salesman_id                     text,
   salesman_name                   text,
   commission_pct                  numeric(7,4) default 0,
   net_profit_sar                  numeric(18,2) default 0,
@@ -590,8 +590,7 @@ end $$;
 --     is only a fallback for rows inserted without them.
 -- [ ] purchase_orders.paid_sar (App.jsx "mark paid" patch) is separate from
 --     paid_amount_sar (PaymentsAndAgingView).
--- [ ] salesman_id / assigned_salesman_id are uuid (team_profiles.id = auth uid).
---     Change to text if team_profiles.id is text.
+-- [x] salesman_id / assigned_salesman_id are text (works with uuid or text team_profiles.id).
 -- [ ] customers.address, whatsapp; vendors.tax_id, whatsapp: only read
 --     (preview modals fallbacks), never written.
 -- [ ] items.stock_on_hand / avg_cost_sar: read by ExecutiveDashboard, never written.
