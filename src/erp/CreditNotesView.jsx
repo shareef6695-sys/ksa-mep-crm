@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { RotateCcw, QrCode, Printer, X, Plus } from 'lucide-react';
 import { generateZatcaQrBase64, formatSAR } from './erpEngine';
+import { postAutoJournal } from './glEngine';
+import { ShareDocumentButtons } from './shareDispatch';
 
 export function CreditNotesView({
   supabase,

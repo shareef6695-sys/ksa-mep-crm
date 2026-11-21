@@ -10,7 +10,7 @@ function getQuarterKey(dateStr) {
   return `${yr}-Q${q}`;
 }
 
-export function ZatcaVatReturnView({ company, invoices, creditNotes, purchaseOrders }) {
+export function ZatcaVatReturnView({ company, invoices, creditNotes, purchaseOrders, expenses = [] }) {
   const currentQ = getQuarterKey(new Date().toISOString());
   const [selectedPeriod, setSelectedPeriod] = useState('ALL');
 
@@ -19,8 +19,9 @@ export function ZatcaVatReturnView({ company, invoices, creditNotes, purchaseOrd
     invoices.forEach((i) => set.add(getQuarterKey(i.issued_at || i.created_at)));
     creditNotes.forEach((c) => set.add(getQuarterKey(c.issued_at)));
     purchaseOrders.forEach((p) => set.add(getQuarterKey(p.created_at)));
+    expenses.forEach((e) => set.add(getQuarterKey(e.expense_date || e.created_at)));
     return Array.from(set).sort().reverse();
-  }, [invoices, creditNotes, purchaseOrders, currentQ]);
+  }, [invoices, creditNotes, purchaseOrders, expenses, currentQ]);
 
   const vatSummary = useMemo(() => {
     const matchPeriod = (dt) => selectedPeriod === 'ALL' || getQuarterKey(dt) === selectedPeriod;
@@ -28,24 +29,32 @@ export function ZatcaVatReturnView({ company, invoices, creditNotes, purchaseOrd
     const filtInv = invoices.filter((i) => matchPeriod(i.issued_at || i.created_at));
     const filtCN = creditNotes.filter((c) => matchPeriod(c.issued_at));
     const filtPO = purchaseOrders.filter((p) => matchPeriod(p.created_at));
+    const filtExp = expenses.filter(
+      (e) => e.status !== 'void' && e.vat_recoverable && Number(e.vat_sar || 0) > 0 && matchPeriod(e.expense_date || e.created_at)
+    );
 
-    // Note: invoices.grand_total_sar was reduced when credit notes posted, so reconstruct gross + net cleanly
+    // Invoices keep their original subtotal_sar / vat_sar (a credit note only reduces grand_total_sar),
+    // so invoice totals are GROSS sales and credit notes are deducted to arrive at net output VAT.
     const cnBase = filtCN.reduce((s, c) => s + Number(c.subtotal_sar || 0), 0);
     const cnVat = filtCN.reduce((s, c) => s + Number(c.vat_sar || 0), 0);
 
-    const netSalesVat = filtInv.reduce((s, i) => s + Number(i.vat_sar || 0), 0);
-    const netSalesBase = filtInv.reduce((s, i) => s + Number(i.subtotal_sar || 0), 0);
+    const grossSalesBase = filtInv.reduce((s, i) => s + Number(i.subtotal_sar || 0), 0);
+    const grossSalesVat = filtInv.reduce((s, i) => s + Number(i.vat_sar || 0), 0);
 
-    const grossSalesBase = netSalesBase + cnBase;
-    const grossSalesVat = netSalesVat + cnVat;
+    const netSalesBase = grossSalesBase - cnBase;
+    const netSalesVat = grossSalesVat - cnVat;
 
-    const recoverablePurchaseBase = filtPO
-      .filter((p) => p.is_ksa_vat_recoverable !== false && Number(p.input_vat_sar || 0) > 0)
-      .reduce((s, p) => s + Number(p.total_landed_sar || 0), 0);
+    const recoverablePurchaseBase =
+      filtPO
+        .filter((p) => p.is_ksa_vat_recoverable !== false && Number(p.input_vat_sar || 0) > 0)
+        .reduce((s, p) => s + Number(p.total_landed_sar || 0), 0) +
+      filtExp.reduce((s, e) => s + Number(e.amount_sar || 0), 0);
 
-    const inputVatRecoverable = filtPO
-      .filter((p) => p.is_ksa_vat_recoverable !== false)
-      .reduce((s, p) => s + Number(p.input_vat_sar || 0), 0);
+    const inputVatRecoverable =
+      filtPO
+        .filter((p) => p.is_ksa_vat_recoverable !== false)
+        .reduce((s, p) => s + Number(p.input_vat_sar || 0), 0) +
+      filtExp.reduce((s, e) => s + Number(e.vat_sar || 0), 0);
 
     const netVatPayable = Number((netSalesVat - inputVatRecoverable).toFixed(2));
 
@@ -63,7 +72,7 @@ export function ZatcaVatReturnView({ company, invoices, creditNotes, purchaseOrd
       cnCount: filtCN.length,
       poCount: filtPO.length,
     };
-  }, [invoices, creditNotes, purchaseOrders, selectedPeriod]);
+  }, [invoices, creditNotes, purchaseOrders, expenses, selectedPeriod]);
 
   return (
     <div className="space-y-4">
@@ -86,7 +95,7 @@ export function ZatcaVatReturnView({ company, invoices, creditNotes, purchaseOrd
             ))}
           </select>
 
-          <button onClick={() => downloadCsvFile(ZATCA_VAT_Return_.csv, ['ZATCA Return Line Item', 'Taxable Amount (SAR)', 'Adjustment (SAR)', 'VAT Amount 15% (SAR)'], [['1. Standard-Rated Sales (15%)', vatSummary.grossSalesBase.toFixed(2), (-vatSummary.cnBase).toFixed(2), vatSummary.grossSalesVat.toFixed(2)], ['2. Less: ZATCA Credit Notes / Sales Returns', (-vatSummary.cnBase).toFixed(2), '0.00', (-vatSummary.cnVat).toFixed(2)], ['3. Total Output VAT Due (Net Sales VAT)', vatSummary.netSalesBase.toFixed(2), '0.00', vatSummary.netSalesVat.toFixed(2)], ['4. Standard-Rated Purchases Input VAT (15%)', vatSummary.recoverablePurchaseBase.toFixed(2), '0.00', (-vatSummary.inputVatRecoverable).toFixed(2)], ['5. NET VAT PAYABLE TO ZATCA', '', '', vatSummary.netVatPayable.toFixed(2)]])} className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold cursor-pointer">Export Excel / CSV</button>
+          <button onClick={() => downloadCsvFile(`ZATCA_VAT_Return_${selectedPeriod}.csv`, ['ZATCA Return Line Item', 'Taxable Amount (SAR)', 'Adjustment (SAR)', 'VAT Amount 15% (SAR)'], [['1. Standard-Rated Sales (15%)', vatSummary.grossSalesBase.toFixed(2), (-vatSummary.cnBase).toFixed(2), vatSummary.grossSalesVat.toFixed(2)], ['2. Less: ZATCA Credit Notes / Sales Returns', (-vatSummary.cnBase).toFixed(2), '0.00', (-vatSummary.cnVat).toFixed(2)], ['3. Total Output VAT Due (Net Sales VAT)', vatSummary.netSalesBase.toFixed(2), '0.00', vatSummary.netSalesVat.toFixed(2)], ['4. Standard-Rated Purchases Input VAT (15%)', vatSummary.recoverablePurchaseBase.toFixed(2), '0.00', (-vatSummary.inputVatRecoverable).toFixed(2)], ['5. NET VAT PAYABLE TO ZATCA', '', '', vatSummary.netVatPayable.toFixed(2)]])} className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold cursor-pointer">Export Excel / CSV</button>
           <button onClick={() => window.print()}
             className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-blue-600 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
           >
@@ -100,7 +109,7 @@ export function ZatcaVatReturnView({ company, invoices, creditNotes, purchaseOrd
         <div className="bg-slate-900 text-white px-5 py-3.5 flex flex-wrap justify-between items-center gap-2 text-xs">
           <div>
             <div className="flex items-center gap-3">{company?.logoUrl && (<img src={company.logoUrl} alt="Company Logo" className="h-9 max-w-[130px] object-contain bg-white rounded p-0.5" />)}<div><span className="font-bold">{company.nameEn}</span> • VAT TIN: <span className="font-mono">{company.vatNumber}</span>
-          </div></div>
+          </div></div></div>
           <span className="px-2.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-semibold">
             Period: {selectedPeriod === 'ALL' ? 'Cumulative All Quarters' : selectedPeriod}
           </span>

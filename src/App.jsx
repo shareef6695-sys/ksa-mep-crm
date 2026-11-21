@@ -12,6 +12,25 @@ import { CustomersMasterView, VendorsMasterView, ItemsMasterView, STANDARD_UOMS,
 import { SmartEntitySelect, GlobalSmartDiscoveryModal } from './erp/SmartDiscovery';
 import { NumberRangesView } from './erp/NumberRangesView';
 import { CreditNotesView } from './erp/CreditNotesView';
+import { CompanyLogoUploader } from './erp/CompanyLogoUploader';
+import { ShareDocumentButtons, SharePurchaseOrderButtons } from './erp/shareDispatch';
+import { QuotationPreviewModal, DeliveryNotePreviewModal, SalesOrderPreviewModal } from './erp/QuotationAndDeliveryPreviewModals';
+import { PurchaseOrderPreviewModal } from './erp/PurchaseOrderPreviewModal';
+import { ExecutiveDashboardView } from './erp/ExecutiveDashboardView';
+import { GeneralLedgerView } from './erp/GeneralLedgerView';
+import { FinancialStatementsView } from './erp/FinancialStatementsView';
+import { SupplierPaymentsView, AgingReportView } from './erp/PaymentsAndAgingView';
+import { ZatcaVatReturnView, DealProfitabilityView } from './erp/VatAndProfitabilityView';
+import {
+  BankCashView,
+  ExpenseVouchersView,
+  FixedAssetsView,
+  BudgetVsActualView,
+  CashFlowStatementView,
+  PartyStatementsView,
+  PeriodCloseView,
+} from './erp/FinanceSuiteViews';
+import { postAutoJournal } from './erp/glEngine';
 
 const SUPABASE_URL = 'https://jknuhynysewoizjxbidw.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImprbnVoeW55c2V3b2l6anhiaWR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUxODgwMDMsImV4cCI6MjExMDc2NDAwM30.cM0tm_pnvgIN40MYrIB92RR4g4bLvFQx415hvOWuLsU';
@@ -205,6 +224,23 @@ export default function App() {
   const [numberRanges, setNumberRanges] = useState([]);
   const [creditNotes, setCreditNotes] = useState([]);
 
+  // Finance & Accounting Tables
+  const [glAccounts, setGlAccounts] = useState([]);
+  const [glEntries, setGlEntries] = useState([]);
+  const [supplierPayments, setSupplierPayments] = useState([]);
+  const [expenses, setExpenses] = useState([]);
+  const [fixedAssets, setFixedAssets] = useState([]);
+  const [budgets, setBudgets] = useState([]);
+  const [bankReconciliations, setBankReconciliations] = useState([]);
+  const [glLockDate, setGlLockDate] = useState('');
+  const [missingTables, setMissingTables] = useState([]);
+
+  // A4 Document Preview Modals
+  const [previewQuotation, setPreviewQuotation] = useState(null);
+  const [previewSO, setPreviewSO] = useState(null);
+  const [previewDN, setPreviewDN] = useState(null);
+  const [previewPO, setPreviewPO] = useState(null);
+
   // Team / Salesman Creation State
   const [showNewMemberForm, setShowNewMemberForm] = useState(false);
   const [memberCreating, setMemberCreating] = useState(false);
@@ -295,7 +331,21 @@ export default function App() {
         label: '2. Finance & Collections',
         icon: CreditCard,
         subModules: [
+          { id: 'fin_dashboard', label: 'CEO Executive Dashboard', icon: Layers },
           { id: 'fin_collections', label: 'AR Customer Receipts', icon: CreditCard, count: receipts.length },
+          { id: 'fin_supplier_payments', label: 'AP Supplier Payments', icon: CreditCard, count: supplierPayments.length },
+          { id: 'fin_aging', label: 'AR / AP Aging', icon: FileText },
+          { id: 'fin_statements_of_account', label: 'Customer / Supplier Statements', icon: FileText },
+          { id: 'fin_bank_cash', label: 'Bank, Cash & Reconciliation', icon: CreditCard },
+          { id: 'fin_expenses', label: 'Expense Vouchers & Petty Cash', icon: Receipt, count: expenses.length },
+          { id: 'fin_fixed_assets', label: 'Fixed Assets & Depreciation', icon: Package, count: fixedAssets.length },
+          { id: 'fin_gl', label: 'General Ledger, CoA & JV', icon: FileText, count: glEntries.length },
+          { id: 'fin_statements', label: 'P&L & Balance Sheet', icon: FileText },
+          { id: 'fin_cash_flow', label: 'Cash Flow Statement', icon: FileText },
+          { id: 'fin_budget', label: 'Budget vs Actual', icon: Sliders },
+          { id: 'fin_vat_return', label: 'ZATCA VAT Return', icon: Percent },
+          { id: 'fin_profitability', label: 'Deal & Division Profitability', icon: Percent },
+          { id: 'fin_period_close', label: 'Period Lock & Year-End Close', icon: Lock },
           { id: 'fin_zatca_advisor', label: 'ZATCA Wave & VAT', icon: QrCode },
         ],
       },
@@ -337,7 +387,7 @@ export default function App() {
         ],
       },
     ],
-    [customers.length, inquiries.length, salesOrders.length, deliveryNotes.length, invoices.length, receipts.length, vendors.length, purchaseOrders, items.length, commissions.length, teamProfiles.length, numberRanges.length, creditNotes.length]
+    [customers.length, inquiries.length, salesOrders.length, deliveryNotes.length, invoices.length, receipts.length, vendors.length, purchaseOrders, items.length, commissions.length, teamProfiles.length, numberRanges.length, creditNotes.length, supplierPayments.length, expenses.length, fixedAssets.length, glEntries.length]
   );
 
   const toggleMainModule = (modId) => {
@@ -397,6 +447,13 @@ export default function App() {
       uomRes,
       rangeRes,
       cnRes,
+      glAccRes,
+      glEntRes,
+      spayRes,
+      expRes,
+      faRes,
+      budRes,
+      recoRes,
     ] = await Promise.all([
       supabase.from('app_settings').select('*'),
       supabase.from('inquiries').select('*').order('updated_at', { ascending: false }),
@@ -413,6 +470,13 @@ export default function App() {
       supabase.from('custom_uoms').select('*').order('code'),
       supabase.from('document_number_ranges').select('*').order('doc_type'),
       supabase.from('credit_notes').select('*').order('issued_at', { ascending: false }),
+      supabase.from('gl_accounts').select('*').order('account_code'),
+      supabase.from('gl_journal_entries').select('*').order('entry_date', { ascending: false }).order('created_at', { ascending: false }),
+      supabase.from('supplier_payments').select('*').order('payment_date', { ascending: false }),
+      supabase.from('expense_vouchers').select('*').order('expense_date', { ascending: false }),
+      supabase.from('fixed_assets').select('*').order('acquisition_date', { ascending: false }),
+      supabase.from('gl_budgets').select('*').order('account_code'),
+      supabase.from('bank_reconciliations').select('*').order('statement_date', { ascending: false }),
     ]);
 
     if (settingsRes.data) {
@@ -420,6 +484,8 @@ export default function App() {
       const compRow = settingsRes.data.find((r) => r.key === 'company_profile');
       if (fxRow?.value) setFxRates(fxRow.value);
       if (compRow?.value) setCompany({ ...DEFAULT_COMPANY, ...compRow.value });
+      const lockRow = settingsRes.data.find((r) => r.key === 'gl_period_lock');
+      setGlLockDate(lockRow?.value?.lockDate || '');
     }
     if (inqRes.data) setInquiries(inqRes.data.map((r) => r.data));
     if (soRes.data) setSalesOrders(soRes.data);
@@ -435,6 +501,21 @@ export default function App() {
     if (uomRes.data) setCustomUoms(uomRes.data);
     if (rangeRes.data) setNumberRanges(rangeRes.data);
     if (cnRes.data) setCreditNotes(cnRes.data);
+    if (glAccRes.data) setGlAccounts(glAccRes.data);
+    if (glEntRes.data) setGlEntries(glEntRes.data);
+    if (spayRes.data) setSupplierPayments(spayRes.data);
+    if (expRes.data) setExpenses(expRes.data);
+    if (faRes.data) setFixedAssets(faRes.data);
+    if (budRes.data) setBudgets(budRes.data);
+    if (recoRes.data) setBankReconciliations(recoRes.data);
+
+    // Surface missing-schema problems instead of silently showing empty screens
+    const missing = [
+      ['sales_orders', soRes], ['invoices', invRes], ['purchase_orders', poRes], ['customer_receipts', recRes],
+      ['customers', custRes], ['gl_accounts', glAccRes], ['gl_journal_entries', glEntRes], ['supplier_payments', spayRes],
+      ['expense_vouchers', expRes], ['fixed_assets', faRes], ['gl_budgets', budRes], ['bank_reconciliations', recoRes],
+    ].filter(([, r]) => r.error?.code === 'PGRST205' || r.error?.code === '42P01').map(([t]) => t);
+    setMissingTables(missing);
     setSyncStatus('live');
   };
 
@@ -845,7 +926,7 @@ export default function App() {
     await supabase.from('delivery_notes').insert({
       id: `dn-${Date.now()}`,
       dn_number: dnNum,
-      division: so.division || 'MEP',
+      division: deliveryModalSO.division || 'MEP',
       so_id: deliveryModalSO.id,
       so_number: deliveryModalSO.so_number,
       client_name: deliveryModalSO.client_name,
@@ -868,6 +949,15 @@ export default function App() {
     selectSubModule('sales', 'sales_deliveries');
     refreshAllErpData();
   };
+
+  // Resolve "code - name" labels for auto-posted GL lines from the live Chart of Accounts
+  const glLine = (code, fallbackName, debit, credit, memo = '') => {
+    const acc = glAccounts.find((a) => a.account_code === code);
+    return { account_code: code, account_name: `${code} - ${acc?.account_name_en || fallbackName}`, debit, credit, memo };
+  };
+
+  // Map an AR receipt method to its cash / bank GL account
+  const receiptCashAccount = (method) => (method === 'Cash' ? ['1010', 'Cash on Hand'] : ['1020', 'Bank - Main Current Account']);
 
   const handleGenerateZatcaInvoiceFromDN = async (dn) => {
     const parentSO = salesOrders.find((s) => s.id === dn.so_id);
@@ -912,7 +1002,31 @@ export default function App() {
       issued_at: issuedIso,
     };
 
-    const { data: insertedInv } = await supabase.from('invoices').insert(newInv).select().single();
+    const { data: insertedInv, error: invErr } = await supabase.from('invoices').insert(newInv).select().single();
+    if (invErr) {
+      alert(`Invoice could not be saved: ${invErr.message}`);
+      return;
+    }
+
+    // Auto-GL: Dr AR / Cr Revenue (by division) / Cr Output VAT, and relieve inventory to COGS at landed cost
+    const isIT = (dn.division || 'MEP') === 'IT & ELV';
+    await postAutoJournal({
+      supabase,
+      entryDate: issuedIso.slice(0, 10),
+      sourceModule: 'INVOICE',
+      sourceDocNumber: invNum,
+      description: `ZATCA Invoice ${invNum} - ${dn.client_name} (${dn.so_number || ''})`,
+      postedBy: profile?.full_name || 'System Auto-GL',
+      lines: [
+        glLine('1100', 'Accounts Receivable (Trade Customers)', grandTotal, 0, dn.client_name),
+        isIT
+          ? glLine('4020', 'Revenue - IT & ELV Systems', 0, subtotal, invNum)
+          : glLine('4010', 'Revenue - MEP Trading & Contracting', 0, subtotal, invNum),
+        glLine('2100', 'VAT Payable / Output VAT (15%)', 0, vat, 'Output VAT 15%'),
+        glLine('5010', 'Cost of Goods Sold (Landed COGS)', landedCost, 0, `COGS ${invNum}`),
+        glLine('1200', 'Inventory / Warehouse Stock', 0, landedCost, `Stock relief ${dn.dn_number || ''}`),
+      ],
+    });
 
     const netProfit = Math.max(0, subtotal - landedCost);
     const commPct = Number(parentSO?.commission_pct || 0);
@@ -954,16 +1068,41 @@ export default function App() {
     );
     const isFullyPaid = newPaidTotal >= Number(paymentModalInv.grand_total_sar) - 0.01;
 
-    await supabase.from('customer_receipts').insert({
+    const receiptNumber = (await supabase.rpc('next_doc_number', { p_doc_type: 'RECEIPT' })).data;
+    const appliedAmt = Number((newPaidTotal - Number(paymentModalInv.paid_amount_sar || 0)).toFixed(2));
+    if (appliedAmt <= 0) {
+      alert('This invoice is already fully collected.');
+      return;
+    }
+    const { error: rcpErr } = await supabase.from('customer_receipts').insert({
       id: `rcp-${Date.now()}`,
-      receipt_number: (await supabase.rpc('next_doc_number', { p_doc_type: 'RECEIPT' })).data,
+      receipt_number: receiptNumber,
       invoice_id: paymentModalInv.id,
       invoice_number: paymentModalInv.invoice_number,
       client_name: paymentModalInv.client_name,
-      amount_sar: amt,
+      amount_sar: appliedAmt,
       payment_method: paymentMethod,
       reference_no: paymentRef,
       recorded_by: profile?.full_name || 'Finance',
+    });
+    if (rcpErr) {
+      alert(`Receipt could not be saved: ${rcpErr.message}`);
+      return;
+    }
+
+    // Auto-GL: Dr Cash/Bank / Cr Accounts Receivable
+    const [cashCode, cashName] = receiptCashAccount(paymentMethod);
+    await postAutoJournal({
+      supabase,
+      entryDate: new Date().toISOString().slice(0, 10),
+      sourceModule: 'RECEIPT',
+      sourceDocNumber: receiptNumber,
+      description: `Customer Receipt ${receiptNumber} - ${paymentModalInv.client_name} vs ${paymentModalInv.invoice_number}`,
+      postedBy: profile?.full_name || 'Finance',
+      lines: [
+        glLine(cashCode, cashName, appliedAmt, 0, `${paymentMethod} ${paymentRef || ''}`.trim()),
+        glLine('1100', 'Accounts Receivable (Trade Customers)', 0, appliedAmt, paymentModalInv.client_name),
+      ],
     });
 
     await supabase
@@ -1056,12 +1195,60 @@ export default function App() {
       goods_total_sar: Number(goodsSar.toFixed(2)),
       landed_cost_sar: Number(landedSar.toFixed(2)),
       supplier_vat_sar: Number(vatSar.toFixed(2)),
+      // Total payable in PO currency (goods + landed + VAT) used by AP Supplier Payments & Aging
+      total_amount_fx: Number(((goodsSar + landedSar + vatSar) / (Number(newPO.fxRate) || 1)).toFixed(2)),
+      total_landed_sar: Number((goodsSar + landedSar).toFixed(2)),
+      input_vat_sar: Number(vatSar.toFixed(2)),
+      is_ksa_vat_recoverable: vatSar > 0,
+      paid_amount_fx: 0,
+      paid_amount_sar: 0,
+      payment_status: 'unpaid',
       bill_status: 'unbilled',
     });
 
     setShowNewPOModal(false);
     selectSubModule('purchase', 'pur_orders');
     refreshAllErpData();
+  };
+
+  // Post Supplier Bill: recognise AP liability and recoverable input VAT, capitalise goods + landed cost into inventory
+  const handlePostSupplierBill = async (po) => {
+    const goodsSar = Number(po.goods_total_sar || 0);
+    const landedSar = Number(po.landed_cost_sar || 0);
+    const vatSar = Number(po.supplier_vat_sar || 0);
+    const totalSar = goodsSar + landedSar + vatSar;
+    const fx = Number(po.fx_rate) || 1;
+    const billNumber = `BILL-${po.po_number}`;
+
+    const journal = await postAutoJournal({
+      supabase,
+      entryDate: new Date().toISOString().slice(0, 10),
+      sourceModule: 'SUPPLIER_BILL',
+      sourceDocNumber: billNumber,
+      description: `Supplier Bill ${billNumber} - ${po.supplier_name}`,
+      postedBy: profile?.full_name || 'Finance',
+      lines: [
+        glLine('1200', 'Inventory / Warehouse Stock', goodsSar + landedSar, 0, `Goods ${po.currency} @ ${fx} + landed cost`),
+        glLine('1150', 'VAT Input Recoverable (15%)', vatSar, 0, po.supplier_vat ? `Supplier VAT ${po.supplier_vat}` : ''),
+        glLine('2010', 'Accounts Payable (Trade Suppliers)', 0, totalSar, po.supplier_name),
+      ],
+    });
+    if (!journal && totalSar > 0) {
+      alert('Supplier bill could not be posted to the General Ledger. Check that the finance database schema is installed.');
+      return;
+    }
+
+    await advancePurchaseStage(
+      po,
+      'billed',
+      {
+        bill_status: 'posted',
+        bill_number: billNumber,
+        billed_at: new Date().toISOString(),
+        total_amount_fx: Number(po.total_amount_fx) > 0 ? Number(po.total_amount_fx) : Number((totalSar / fx).toFixed(2)),
+      },
+      'pur_bills'
+    );
   };
 
   const advancePurchaseStage = async (po, nextStatus, extraPatch = {}, nextSubTab = null) => {
@@ -1270,6 +1457,17 @@ export default function App() {
         </header>
 
         <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-5 space-y-5">
+          {missingTables.length > 0 && (
+            <div className="p-3 rounded-2xl border border-red-200 bg-red-50 text-red-900 text-xs flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold">Database setup incomplete: </span>
+                these tables are missing in Supabase: <span className="font-mono">{missingTables.join(', ')}</span>. Run{' '}
+                <span className="font-mono">supabase/schema_existing.sql</span> then <span className="font-mono">supabase/schema_finance.sql</span> in the
+                Supabase SQL Editor. Records in these modules cannot be saved until then.
+              </div>
+            </div>
+          )}
           <div className={`p-3 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs ${zatcaAdvice.badgeClass}`}>
             <div className="flex items-start sm:items-center gap-2">
               <QrCode className="w-4 h-4 shrink-0 mt-0.5 sm:mt-0" />
@@ -1574,6 +1772,72 @@ export default function App() {
           )}
 
           {/* SUB-MODULE: 2.1 AR CUSTOMER RECEIPTS */}
+          {/* ===== FINANCE & ACCOUNTING SUITE ===== */}
+          {activeSubModule === 'fin_dashboard' && (
+            <ExecutiveDashboardView
+              company={company}
+              profile={profile}
+              inquiries={inquiries}
+              salesOrders={salesOrders}
+              invoices={invoices}
+              creditNotes={creditNotes}
+              purchaseOrders={purchaseOrders}
+              receipts={receipts}
+              supplierPayments={supplierPayments}
+              items={items}
+              commissions={commissions}
+              glEntries={glEntries}
+              onNavigate={(_moduleLabel, rawSubId) => {
+                const aliases = { sales_inquiries: 'sales_quotes', fin_deal_pnl: 'fin_profitability', cat_inventory: 'cat_items' };
+                const subId = aliases[rawSubId] || rawSubId;
+                const parent = navTree.find((m) => m.subModules.some((s) => s.id === subId));
+                if (parent) selectSubModule(parent.id, subId);
+              }}
+            />
+          )}
+          {activeSubModule === 'fin_supplier_payments' && (
+            <SupplierPaymentsView supabase={supabase} purchaseOrders={purchaseOrders} supplierPayments={supplierPayments} profile={profile} onRefresh={refreshAllErpData} />
+          )}
+          {activeSubModule === 'fin_aging' && <AgingReportView invoices={invoices} purchaseOrders={purchaseOrders} />}
+          {activeSubModule === 'fin_statements_of_account' && (
+            <PartyStatementsView
+              company={company}
+              customers={customers}
+              vendors={vendors}
+              invoices={invoices}
+              creditNotes={creditNotes}
+              receipts={receipts}
+              purchaseOrders={purchaseOrders}
+              supplierPayments={supplierPayments}
+            />
+          )}
+          {activeSubModule === 'fin_bank_cash' && (
+            <BankCashView supabase={supabase} glAccounts={glAccounts} glEntries={glEntries} bankReconciliations={bankReconciliations} profile={profile} lockDate={glLockDate} onRefresh={refreshAllErpData} />
+          )}
+          {activeSubModule === 'fin_expenses' && (
+            <ExpenseVouchersView supabase={supabase} glAccounts={glAccounts} expenses={expenses} vendors={vendors} profile={profile} lockDate={glLockDate} onRefresh={refreshAllErpData} />
+          )}
+          {activeSubModule === 'fin_fixed_assets' && (
+            <FixedAssetsView supabase={supabase} glAccounts={glAccounts} fixedAssets={fixedAssets} profile={profile} lockDate={glLockDate} onRefresh={refreshAllErpData} />
+          )}
+          {activeSubModule === 'fin_gl' && (
+            <GeneralLedgerView supabase={supabase} glAccounts={glAccounts} glEntries={glEntries} profile={profile} onRefresh={refreshAllErpData} />
+          )}
+          {activeSubModule === 'fin_statements' && <FinancialStatementsView company={company} glAccounts={glAccounts} glEntries={glEntries} />}
+          {activeSubModule === 'fin_cash_flow' && <CashFlowStatementView company={company} glAccounts={glAccounts} glEntries={glEntries} />}
+          {activeSubModule === 'fin_budget' && (
+            <BudgetVsActualView supabase={supabase} glAccounts={glAccounts} glEntries={glEntries} budgets={budgets} onRefresh={refreshAllErpData} />
+          )}
+          {activeSubModule === 'fin_vat_return' && (
+            <ZatcaVatReturnView company={company} invoices={invoices} creditNotes={creditNotes} purchaseOrders={purchaseOrders} expenses={expenses} />
+          )}
+          {activeSubModule === 'fin_profitability' && (
+            <DealProfitabilityView invoices={invoices} creditNotes={creditNotes} commissions={commissions} supplierPayments={supplierPayments} salesOrders={salesOrders} />
+          )}
+          {activeSubModule === 'fin_period_close' && (
+            <PeriodCloseView supabase={supabase} glAccounts={glAccounts} glEntries={glEntries} lockDate={glLockDate} profile={profile} onRefresh={refreshAllErpData} />
+          )}
+
           {activeSubModule === 'fin_collections' && (
             <div className="space-y-4">
               <div>
@@ -1683,18 +1947,18 @@ export default function App() {
                           )}
                           {po.status === 'grn_completed' && (
                             <button
-                              onClick={() => advancePurchaseStage(po, 'billed', { bill_status: 'posted' }, 'pur_bills')}
+                              onClick={() => handlePostSupplierBill(po)}
                               className="px-3 py-2 rounded-xl bg-purple-600 text-white text-xs font-semibold cursor-pointer"
                             >
                               Post Supplier Bill to Finance
                             </button>
                           )}
-                          {po.status === 'billed' && po.bill_status !== 'paid' && (
+                          {po.status === 'billed' && po.bill_status !== 'paid' && po.payment_status !== 'paid' && (
                             <button
-                              onClick={() => advancePurchaseStage(po, 'billed', { bill_status: 'paid', paid_sar: totalLandedSar + Number(po.supplier_vat_sar || 0) })}
+                              onClick={() => selectSubModule('finance', 'fin_supplier_payments')}
                               className="px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-semibold cursor-pointer"
                             >
-                              Mark Supplier Paid
+                              Pay Supplier (AP Voucher)
                             </button>
                           )}
                           {po.bill_status === 'paid' && (
@@ -2563,6 +2827,14 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* MODALS: PRINTABLE A4 QUOTATION / SALES ORDER / DELIVERY NOTE / PURCHASE ORDER */}
+      {previewQuotation && (
+        <QuotationPreviewModal company={company} customers={customers} inquiry={previewQuotation} onClose={() => setPreviewQuotation(null)} />
+      )}
+      {previewSO && <SalesOrderPreviewModal company={company} customers={customers} so={previewSO} onClose={() => setPreviewSO(null)} />}
+      {previewDN && <DeliveryNotePreviewModal company={company} customers={customers} dn={previewDN} onClose={() => setPreviewDN(null)} />}
+      {previewPO && <PurchaseOrderPreviewModal company={company} suppliers={vendors} po={previewPO} onClose={() => setPreviewPO(null)} />}
 
       {/* MODAL: ZATCA BILINGUAL INVOICE PREVIEW */}
       {previewInvoice && (

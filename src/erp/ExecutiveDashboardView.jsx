@@ -68,11 +68,14 @@ export function ExecutiveDashboardView({
         const code = String(l.account_code || '');
         const dr = Number(l.debit || 0);
         const cr = Number(l.credit || 0);
-        if (code === '1010' || code === '1020') {
+        // All cash, bank & petty-cash accounts (1010–1099)
+        if (code.length === 4 && code >= '1010' && code <= '1099') {
           glCashDr += dr;
           glCashCr += cr;
         }
-        if (code.startsWith('51') && code !== '5130' && code !== '5140') {
+        // Operating expenses 51xx–59xx (salaries, rent, depreciation, ...). COGS (50xx), FX (5130)
+        // and commissions (5140/5280) are excluded because they are subtracted separately above.
+        if (code.startsWith('5') && !code.startsWith('50') && !['5130', '5140', '5280'].includes(code)) {
           glOpexSar += dr - cr;
         }
       });
