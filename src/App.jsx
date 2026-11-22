@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import {
   Plus, AlertTriangle, Building2, X,
   ClipboardList, ReceiptText, FileMinus, Gauge, HandCoins, Banknote, CalendarCheck, FileSpreadsheet, Landmark, Wallet,
@@ -37,16 +36,7 @@ import { useUxPrefs, ShellBar, SideNavigation, Launchpad, PageHeader, MessageStr
 import { SmartFilterBar } from './ui/SmartFilterBar';
 import { InvoiceObjectPage, SalesOrderObjectPage, PurchaseOrderObjectPage } from './erp/ObjectPages';
 import { t } from './ui/i18n';
-
-const SUPABASE_URL = 'https://jknuhynysewoizjxbidw.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImprbnVoeW55c2V3b2l6anhiaWR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUxODgwMDMsImV4cCI6MjExMDc2NDAwM30.cM0tm_pnvgIN40MYrIB92RR4g4bLvFQx415hvOWuLsU';
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-// Secondary non-persistent client so Admins can create new Salesman/Team logins without logging themselves out
-const supabaseProvisioner = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-});
+import { supabase, supabaseProvisioner } from './lib/supabase';
 
 const CURRENCIES = ['SAR', 'USD', 'EUR', 'GBP', 'AED'];
 const DEFAULT_FX = { SAR: 1, USD: 3.75, EUR: 4.08, GBP: 4.78, AED: 1.021 };
@@ -1433,10 +1423,16 @@ export default function App() {
   };
 
   const advancePurchaseStage = async (po, nextStatus, extraPatch = {}, nextSubTab = null) => {
-    await supabase
+    const { error } = await supabase
       .from('purchase_orders')
       .update({ status: nextStatus, ...extraPatch, updated_at: new Date().toISOString() })
       .eq('id', po.id);
+    if (error) {
+      // Surface the failure: a silent failure here after a bill journal is posted leads to duplicate AP on retry.
+      alert(`Purchase order ${po.po_number || ''} could not be updated: ${error.message}. Do not re-post this bill; ask Finance to check the General Ledger.`);
+      refreshAllErpData();
+      return;
+    }
     if (nextSubTab) selectSubModule('purchase', nextSubTab);
     refreshAllErpData();
   };
