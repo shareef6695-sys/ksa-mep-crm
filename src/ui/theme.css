@@ -1,0 +1,296 @@
+/* =====================================================================
+   Horizon ERP — enterprise design tokens (light / dark / compact / RTL)
+   ---------------------------------------------------------------------
+   Every screen in the app is written with ordinary Tailwind utilities
+   (bg-white, border-slate-200, bg-blue-600 ...). Tailwind v4 resolves
+   those through CSS variables, so this file re-themes the whole app by
+   redefining the variables, plus a few targeted class overrides where a
+   plain variable swap would break contrast (dark surfaces, dark buttons).
+   Theme / density / direction are set on <html>:
+     data-theme="light" | "dark"   data-density="cozy" | "compact"   dir="ltr" | "rtl"
+   ===================================================================== */
+
+/* ---------- 1. LIGHT THEME (default) ---------- */
+:root {
+  color-scheme: light;
+
+  /* Brand blue scale */
+  --color-blue-50: #ebf8ff;
+  --color-blue-100: #d1efff;
+  --color-blue-200: #a6e0ff;
+  --color-blue-300: #7bcfff;
+  --color-blue-400: #4db1ff;
+  --color-blue-500: #0064d9; /* hover = slightly darker than primary */
+  --color-blue-600: #0070f2; /* primary / emphasized */
+  --color-blue-700: #0057d2;
+  --color-blue-800: #0040b0;
+  --color-blue-900: #002a86;
+  --color-blue-950: #001c5e;
+
+  /* Neutral blue-grey scale */
+  --color-slate-50: #f5f6f7;  /* page background */
+  --color-slate-100: #eaecee;
+  --color-slate-200: #dfe3e7; /* hairline borders */
+  --color-slate-300: #c5cdd5; /* field borders */
+  --color-slate-400: #8396a8;
+  --color-slate-500: #556b82; /* secondary text */
+  --color-slate-600: #475e75;
+  --color-slate-700: #354a5f;
+  --color-slate-800: #223548;
+  --color-slate-900: #1d2d3e; /* primary text / shell dark */
+  --color-slate-950: #12171c;
+
+  /* Shape: crisper, enterprise radii */
+  --radius-lg: 0.375rem;
+  --radius-xl: 0.5rem;   /* buttons, inputs */
+  --radius-2xl: 0.75rem; /* cards, tiles */
+
+  --font-sans: "Noto Sans", "Noto Sans Arabic", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --shell-height: 3rem; /* object-page headers stick below the shell bar */
+
+  /* Semantic tokens used by the shell & launchpad */
+  --ux-shell-bg: #ffffff;
+  --ux-shell-border: #d9dee3;
+  --ux-shell-text: #1d2d3e;
+  --ux-page-bg: #f5f6f7;
+  --ux-card-bg: #ffffff;
+  --ux-card-shadow: 0 0 0.125rem rgba(34, 53, 72, 0.12), 0 0.125rem 0.5rem rgba(34, 53, 72, 0.1);
+  --ux-card-shadow-hover: 0 0 0.125rem rgba(34, 53, 72, 0.16), 0 0.5rem 1.25rem rgba(34, 53, 72, 0.16);
+  --ux-nav-bg: #ffffff;
+  --ux-nav-hover: #eaecee;
+  --ux-nav-selected-bg: #ebf8ff;
+  --ux-nav-selected-text: #0057d2;
+  --ux-accent: #0070f2;
+  --ux-field-bg: #ffffff;
+  --ux-positive: #256f3a;
+  --ux-critical: #c35500;
+  --ux-negative: #aa0808;
+  --ux-info: #0070f2;
+}
+
+/* ---------- 2. DARK THEME (screen only — print always uses light) ---------- */
+@media screen {
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+
+    --color-blue-50: #0b2a4a;
+    --color-blue-100: #0e3560;
+    --color-blue-200: #164a80;
+    --color-blue-300: #4db1ff;
+    --color-blue-400: #7bcfff;
+    --color-blue-500: #1a85ff;
+    --color-blue-600: #0070f2;
+    --color-blue-700: #6cbaff;
+    --color-blue-800: #8fcbff;
+    --color-blue-900: #b5dcff;
+    --color-blue-950: #d6ecff;
+
+    --color-slate-50: #12161b;
+    --color-slate-100: #232a32;
+    --color-slate-200: #323b46;
+    --color-slate-300: #414b57;
+    --color-slate-400: #7f8c99;
+    --color-slate-500: #9eabb8;
+    --color-slate-600: #b5c0cb;
+    --color-slate-700: #c8d1da;
+    --color-slate-800: #dbe2e8;
+    --color-slate-900: #eaeff3;
+    --color-slate-950: #f5f7f9;
+
+    /* Status tints: pale backgrounds become deep translucent tints, dark text becomes light */
+    --color-emerald-50: color-mix(in oklab, var(--color-emerald-500) 14%, #1d232a);
+    --color-emerald-100: color-mix(in oklab, var(--color-emerald-500) 24%, #1d232a);
+    --color-emerald-200: color-mix(in oklab, var(--color-emerald-500) 38%, #1d232a);
+    --color-emerald-700: var(--color-emerald-300);
+    --color-emerald-800: var(--color-emerald-300);
+    --color-emerald-900: var(--color-emerald-200);
+    --color-emerald-950: var(--color-emerald-100);
+    --color-amber-50: color-mix(in oklab, var(--color-amber-500) 14%, #1d232a);
+    --color-amber-100: color-mix(in oklab, var(--color-amber-500) 24%, #1d232a);
+    --color-amber-200: color-mix(in oklab, var(--color-amber-500) 38%, #1d232a);
+    --color-amber-700: var(--color-amber-300);
+    --color-amber-800: var(--color-amber-300);
+    --color-amber-900: var(--color-amber-200);
+    --color-rose-50: color-mix(in oklab, var(--color-rose-500) 14%, #1d232a);
+    --color-rose-100: color-mix(in oklab, var(--color-rose-500) 24%, #1d232a);
+    --color-rose-200: color-mix(in oklab, var(--color-rose-500) 38%, #1d232a);
+    --color-rose-700: var(--color-rose-300);
+    --color-rose-800: var(--color-rose-300);
+    --color-red-50: color-mix(in oklab, var(--color-red-500) 14%, #1d232a);
+    --color-red-200: color-mix(in oklab, var(--color-red-500) 38%, #1d232a);
+    --color-red-900: var(--color-red-300);
+    --color-purple-50: color-mix(in oklab, var(--color-purple-500) 14%, #1d232a);
+    --color-purple-700: var(--color-purple-300);
+    --color-violet-100: color-mix(in oklab, var(--color-violet-500) 24%, #1d232a);
+    --color-violet-800: var(--color-violet-300);
+    --color-indigo-50: color-mix(in oklab, var(--color-indigo-500) 14%, #1d232a);
+    --color-indigo-700: var(--color-indigo-300);
+
+    --ux-shell-bg: #1d232a;
+    --ux-shell-border: #323b46;
+    --ux-shell-text: #eaeff3;
+    --ux-page-bg: #12161b;
+    --ux-card-bg: #1d232a;
+    --ux-card-shadow: 0 0 0 1px #2a323c, 0 0.125rem 0.5rem rgba(0, 0, 0, 0.35);
+    --ux-card-shadow-hover: 0 0 0 1px #3a4552, 0 0.5rem 1.25rem rgba(0, 0, 0, 0.5);
+    --ux-nav-bg: #1a1f25;
+    --ux-nav-hover: #262e37;
+    --ux-nav-selected-bg: #0b2a4a;
+    --ux-nav-selected-text: #7bcfff;
+    --ux-field-bg: #161b21;
+    --ux-positive: #5dc122;
+    --ux-critical: #ff9a3d;
+    --ux-negative: #ff6a6a;
+    --ux-info: #4db1ff;
+  }
+
+  /* Surfaces & dark "ink" elements that must stay dark with white text */
+  :root[data-theme="dark"] .bg-white { background-color: var(--ux-card-bg); }
+  :root[data-theme="dark"] .bg-slate-900 { background-color: #2c3642; }
+  :root[data-theme="dark"] .bg-slate-800 { background-color: #36414e; }
+  :root[data-theme="dark"] .bg-slate-950 { background-color: #0b0e12; }
+  :root[data-theme="dark"] .hover\:bg-slate-700:hover,
+  :root[data-theme="dark"] .hover\:bg-slate-800:hover { background-color: #44505e; }
+  :root[data-theme="dark"] .bg-slate-950\/60,
+  :root[data-theme="dark"] .bg-slate-950\/70,
+  :root[data-theme="dark"] .bg-slate-950\/75,
+  :root[data-theme="dark"] .bg-slate-950\/80 { background-color: rgba(0, 0, 0, 0.7); }
+  :root[data-theme="dark"] .border-slate-700,
+  :root[data-theme="dark"] .border-slate-800,
+  :root[data-theme="dark"] .border-slate-900 { border-color: #3a4552; }
+  :root[data-theme="dark"] .text-slate-300 { color: #c8d1da; }
+  :root[data-theme="dark"] .text-slate-200,
+  :root[data-theme="dark"] .text-slate-100 { color: #dbe2e8; }
+  :root[data-theme="dark"] .bg-emerald-700 { background-color: #1e6b3a; }
+  :root[data-theme="dark"] .bg-emerald-800 { background-color: #175a30; }
+  :root[data-theme="dark"] .bg-emerald-900 { background-color: #12401f; }
+  :root[data-theme="dark"] .bg-blue-800 { background-color: #0040b0; }
+  :root[data-theme="dark"] .bg-blue-900 { background-color: #002a86; }
+  :root[data-theme="dark"] .bg-amber-700 { background-color: #a05a00; }
+  :root[data-theme="dark"] .hover\:bg-emerald-600:hover { background-color: #1e7a42; }
+
+  /* Native form controls */
+  :root[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+  :root[data-theme="dark"] select,
+  :root[data-theme="dark"] textarea {
+    background-color: var(--ux-field-bg);
+    color: var(--color-slate-900);
+  }
+}
+
+/* ---------- 3. COMPACT DENSITY ---------- */
+/* Every Tailwind spacing utility is a multiple of --spacing, so one token tightens the whole UI. */
+:root[data-density="compact"] {
+  --spacing: 0.2rem;
+}
+:root[data-density="compact"] table td,
+:root[data-density="compact"] table th {
+  padding-top: 0.35rem;
+  padding-bottom: 0.35rem;
+}
+
+/* ---------- 4. BASE ---------- */
+html,
+body {
+  background-color: var(--ux-page-bg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Cards: soft enterprise elevation instead of heavy borders */
+@media screen {
+  .rounded-2xl.bg-white,
+  .rounded-xl.bg-white.border {
+    box-shadow: var(--ux-card-shadow);
+  }
+}
+
+/* Keyboard focus */
+:focus-visible {
+  outline: 2px solid var(--ux-accent);
+  outline-offset: 1px;
+}
+
+/* Thin scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-slate-300) transparent;
+}
+
+/* Right-to-left: mirror directional icons */
+[dir="rtl"] .ux-flip-rtl {
+  transform: scaleX(-1);
+}
+
+/* ---------- 5. SHELL & LAUNCHPAD COMPONENTS ---------- */
+.ux-shellbar {
+  background: var(--ux-shell-bg);
+  color: var(--ux-shell-text);
+  border-bottom: 1px solid var(--ux-shell-border);
+  box-shadow: 0 0.125rem 0.25rem rgba(34, 53, 72, 0.06);
+}
+
+.ux-sidenav {
+  background: var(--ux-nav-bg);
+  border-inline-end: 1px solid var(--ux-shell-border);
+}
+.ux-nav-item {
+  position: relative;
+  color: var(--color-slate-700);
+}
+.ux-nav-item:hover {
+  background: var(--ux-nav-hover);
+}
+.ux-nav-item[aria-current="page"] {
+  background: var(--ux-nav-selected-bg);
+  color: var(--ux-nav-selected-text);
+  font-weight: 700;
+}
+.ux-nav-item[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0.25rem;
+  bottom: 0.25rem;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--ux-accent);
+}
+
+.ux-tile {
+  background: var(--ux-card-bg);
+  box-shadow: var(--ux-card-shadow);
+  border-radius: var(--radius-2xl);
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+.ux-tile:hover {
+  box-shadow: var(--ux-card-shadow-hover);
+  transform: translateY(-1px);
+}
+.ux-tile:active {
+  transform: translateY(0);
+}
+
+.ux-kpi-positive { color: var(--ux-positive); }
+.ux-kpi-critical { color: var(--ux-critical); }
+.ux-kpi-negative { color: var(--ux-negative); }
+.ux-kpi-info { color: var(--ux-info); }
+
+.ux-page-header {
+  background: var(--ux-card-bg);
+  border-bottom: 1px solid var(--ux-shell-border);
+}
+
+.ux-popover {
+  background: var(--ux-card-bg);
+  box-shadow: 0 0 0 1px var(--ux-shell-border), 0 0.75rem 2rem rgba(0, 0, 0, 0.18);
+  border-radius: var(--radius-2xl);
+}
+
+@media print {
+  .ux-shellbar,
+  .ux-sidenav,
+  .ux-page-header {
+    display: none !important;
+  }
+}

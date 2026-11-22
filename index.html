@@ -1,9 +1,26 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" dir="ltr" data-theme="light" data-density="cozy">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>KSA MEP & IT Sales CRM</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      // Apply saved theme / density / language before first paint (no flash of the wrong theme)
+      try {
+        var p = JSON.parse(localStorage.getItem('ux_prefs') || '{}');
+        var h = document.documentElement;
+        var theme = p.theme === 'dark' || (p.theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+        h.setAttribute('data-theme', theme);
+        h.setAttribute('data-density', p.density === 'compact' ? 'compact' : 'cozy');
+        if (p.lang === 'ar') { h.setAttribute('lang', 'ar'); h.setAttribute('dir', 'rtl'); }
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

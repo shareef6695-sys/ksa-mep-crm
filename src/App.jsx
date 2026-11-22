@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import {
   Plus, AlertTriangle, Building2, X,
+  ClipboardList, ReceiptText, FileMinus, Gauge, HandCoins, Banknote, CalendarCheck, FileSpreadsheet, Landmark, Wallet,
+  Building, BookOpen, Scale, Waves, PieChart, Calculator, LineChart, ShieldCheck, Boxes, Hash,
   Lock, Eye, EyeOff, LogOut, RefreshCw, ArrowRight, Layers,
   Truck, Receipt, ShoppingBag, Percent, Settings, Printer, QrCode,
   ChevronDown, ChevronRight, Menu, PanelLeftClose, PanelLeftOpen,
@@ -31,6 +33,10 @@ import {
   PeriodCloseView,
 } from './erp/FinanceSuiteViews';
 import { postAutoJournal } from './erp/glEngine';
+import { useUxPrefs, ShellBar, SideNavigation, Launchpad, PageHeader, MessageStrip } from './ui/FioriShell';
+import { SmartFilterBar } from './ui/SmartFilterBar';
+import { InvoiceObjectPage, SalesOrderObjectPage, PurchaseOrderObjectPage } from './erp/ObjectPages';
+import { t } from './ui/i18n';
 
 const SUPABASE_URL = 'https://jknuhynysewoizjxbidw.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImprbnVoeW55c2V3b2l6anhiaWR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUxODgwMDMsImV4cCI6MjExMDc2NDAwM30.cM0tm_pnvgIN40MYrIB92RR4g4bLvFQx415hvOWuLsU';
@@ -82,6 +88,9 @@ const computeQuoteFinancials = (inquiry, fxRates) => {
 };
 
 function LoginLandingPage({ company, onLoginSuccess }) {
+  const [uxPrefs, setUxPrefs] = useUxPrefs();
+  const isAr = uxPrefs.lang === 'ar';
+  const L = (en, ar) => (isAr ? ar : en);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -107,79 +116,119 @@ function LoginLandingPage({ company, onLoginSuccess }) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col lg:flex-row">
-      <div className="lg:w-7/12 p-6 sm:p-10 lg:p-16 flex flex-col justify-between bg-gradient-to-br from-slate-900 via-slate-900 to-blue-950 border-b lg:border-b-0 lg:border-r border-slate-800">
-        <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-400/20 text-blue-300 text-[11px] font-semibold uppercase mb-4 sm:mb-8">
-            <Building2 className="w-3.5 h-3.5" /> KSA Enterprise Resource Planning (ERP)
-          </div>
-          <h1 className="text-2xl sm:text-4xl lg:text-5xl font-bold text-white leading-tight">{company.nameEn}</h1>
-          <p className="text-base sm:text-xl text-blue-300 font-semibold mt-1">{company.nameAr}</p>
-          <p className="mt-3 text-sm sm:text-base text-slate-300 max-w-xl leading-relaxed">
-            Integrated Master Data, Sales Orders, Partial/Full Deliveries, ZATCA E-Invoicing, Multi-Currency Purchase Cycle &amp; Collection-Based Profit Share.
-          </p>
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
+      <div className="ux-shellbar h-12 px-4 flex items-center justify-between">
+        <div className="flex items-center gap-2 min-w-0">
+          {company.logoUrl ? (
+            <img src={company.logoUrl} alt="" className="h-7 max-w-[100px] object-contain" />
+          ) : (
+            <span className="w-7 h-7 rounded-lg bg-blue-600 text-white font-bold text-sm flex items-center justify-center">{(company.nameEn || 'H')[0]}</span>
+          )}
+          <span className="font-bold text-sm truncate">{L('Horizon ERP', 'نظام هورايزن')}</span>
         </div>
-        <div className="hidden lg:flex mt-12 pt-6 border-t border-slate-800/80 items-center justify-between text-xs text-slate-500">
-          <span>© {new Date().getFullYear()} {company.nameEn}</span>
-          <span>VAT: {company.vatNumber} • CR: {company.crNumber}</span>
+        <div className="flex items-center gap-1 p-0.5 rounded-xl bg-slate-100 text-[11px] font-semibold">
+          {[['en', 'English'], ['ar', 'العربية']].map(([code, label]) => (
+            <button
+              key={code}
+              type="button"
+              onClick={() => setUxPrefs({ lang: code })}
+              className={`px-2.5 py-1 rounded-lg cursor-pointer ${uxPrefs.lang === code ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600'}`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
-      <div className="flex-1 lg:w-5/12 p-5 sm:p-10 lg:p-16 flex items-center justify-center bg-slate-950">
-        <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl">
-          <div className="w-11 h-11 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 mb-4">
-            <Lock className="w-5 h-5" />
+      <div className="flex-1 grid lg:grid-cols-2">
+        <div className="hidden lg:flex flex-col justify-between p-12 xl:p-16 bg-gradient-to-br from-blue-600 to-blue-900 text-white">
+          <div>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-[11px] font-semibold uppercase tracking-wide">
+              <Building2 className="w-3.5 h-3.5" /> {L('Enterprise Resource Planning • KSA', 'تخطيط موارد المؤسسة • المملكة العربية السعودية')}
+            </div>
+            <h1 className="mt-8 text-4xl xl:text-5xl font-bold leading-tight">{isAr ? company.nameAr : company.nameEn}</h1>
+            <p className="mt-2 text-lg text-blue-100 font-semibold">{isAr ? company.nameEn : company.nameAr}</p>
+            <ul className="mt-10 space-y-3 text-sm text-blue-50 max-w-md">
+              {[
+                L('Order-to-cash: quotations, sales orders, deliveries, ZATCA e-invoices', 'من الطلب إلى التحصيل: عروض الأسعار وأوامر البيع والتسليم والفوترة الإلكترونية'),
+                L('Procure-to-pay with multi-currency landed cost', 'من الشراء إلى السداد مع التكلفة الواصلة متعددة العملات'),
+                L('Full accounting: GL, bank, assets, VAT return, statements', 'محاسبة متكاملة: الأستاذ العام والبنوك والأصول والإقرار الضريبي والقوائم المالية'),
+              ].map((line) => (
+                <li key={line} className="flex items-start gap-2.5">
+                  <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-white shrink-0" />
+                  {line}
+                </li>
+              ))}
+            </ul>
           </div>
-          <h2 className="text-xl sm:text-2xl font-bold text-white">ERP Staff Sign In</h2>
-          <p className="text-xs sm:text-sm text-slate-400 mt-1">Sign in with your corporate credentials.</p>
+          <div className="text-xs text-blue-100 flex items-center justify-between gap-4">
+            <span>© {new Date().getFullYear()} {company.nameEn}</span>
+            <span>VAT {company.vatNumber} • CR {company.crNumber}</span>
+          </div>
+        </div>
 
-          {errorMsg && (
-            <div className="mt-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
-              <span>{errorMsg}</span>
+        <div className="flex items-center justify-center p-5 sm:p-10">
+          <div className="w-full max-w-sm bg-white rounded-2xl p-6 sm:p-8">
+            <div className="lg:hidden mb-5">
+              <div className="text-lg font-bold">{isAr ? company.nameAr : company.nameEn}</div>
+              <div className="text-xs text-slate-500">{L('Enterprise Resource Planning', 'تخطيط موارد المؤسسة')}</div>
             </div>
-          )}
+            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mb-4">
+              <Lock className="w-5 h-5" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-900">{L('Sign in', 'تسجيل الدخول')}</h2>
+            <p className="text-xs text-slate-500 mt-1">{L('Use your corporate email and password.', 'استخدم بريدك الإلكتروني وكلمة المرور الخاصة بالعمل.')}</p>
 
-          <form onSubmit={handleSignIn} className="mt-5 space-y-4">
-            <div>
-              <label className="block text-xs font-semibold uppercase text-slate-400 mb-1.5">Work Email</label>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@horizon-ksa.com"
-                className="w-full px-3.5 py-3 bg-slate-950 border border-slate-700 rounded-xl text-base sm:text-sm text-white focus:outline-none focus:border-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold uppercase text-slate-400 mb-1.5">Password</label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full pl-3.5 pr-12 py-3 bg-slate-950 border border-slate-700 rounded-xl text-base sm:text-sm text-white focus:outline-none focus:border-blue-500"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-2.5 text-slate-400 p-1"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
+            {errorMsg && (
+              <div className="mt-4 px-3 py-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-800 text-xs flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{errorMsg}</span>
               </div>
-            </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm flex items-center justify-center gap-2 cursor-pointer"
-            >
-              {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <>Sign In to ERP <ArrowRight className="w-4 h-4" /></>}
-            </button>
-          </form>
+            )}
+
+            <form onSubmit={handleSignIn} className="mt-5 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">{L('Work email', 'البريد الإلكتروني')}</label>
+                <input
+                  type="email"
+                  required
+                  dir="ltr"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@company.com"
+                  className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-base sm:text-sm focus:outline-none focus:border-blue-600"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">{L('Password', 'كلمة المرور')}</label>
+                <div className="relative" dir="ltr">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full ps-3 pe-11 py-2.5 bg-white border border-slate-300 rounded-xl text-base sm:text-sm focus:outline-none focus:border-blue-600"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute end-2.5 top-2 text-slate-500 p-1 cursor-pointer"
+                    aria-label={showPassword ? L('Hide password', 'إخفاء كلمة المرور') : L('Show password', 'إظهار كلمة المرور')}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+              >
+                {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <>{L('Sign in', 'دخول')} <ArrowRight className="w-4 h-4 ux-flip-rtl" /></>}
+              </button>
+            </form>
+          </div>
         </div>
       </div>
     </div>
@@ -196,7 +245,16 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState('connecting');
 
   // Navigation & Global Smart Search
-  const [activeSubModule, setActiveSubModule] = useState('sales_quotes');
+  const [activeSubModule, setActiveSubModule] = useState('home');
+  const [uxPrefs, setUxPrefs] = useUxPrefs();
+  const lang = uxPrefs.lang;
+  // Full-page object view (invoice / sales order / purchase order) shown in place of the list
+  const [objectPage, setObjectPage] = useState(null); // { type: 'invoice' | 'so' | 'po', id }
+  const openObject = (type, id) => {
+    setObjectPage({ type, id });
+    window.scrollTo({ top: 0 });
+  };
+  const closeObject = () => setObjectPage(null);
   const [expandedModules, setExpandedModules] = useState({
     sales: true,
     finance: true,
@@ -319,11 +377,11 @@ export default function App() {
         icon: Layers,
         subModules: [
           { id: 'sales_customers', label: 'Customers Master', icon: Users, count: customers.length },
-          { id: 'sales_quotes', label: 'Inquiries & Quotes', icon: FileText, count: inquiries.length },
+          { id: 'sales_quotes', label: 'Inquiries & Quotes', icon: ClipboardList, count: inquiries.length },
           { id: 'sales_orders', label: 'Sales Orders (SO)', icon: ShoppingBag, count: salesOrders.length },
           { id: 'sales_deliveries', label: 'Deliveries (Full/Partial)', icon: Truck, count: deliveryNotes.length },
-          { id: 'sales_invoices', label: 'ZATCA Invoices', icon: Receipt, count: invoices.length },
-          { id: 'sales_credit_notes', label: 'ZATCA Credit Notes', icon: FileText, count: creditNotes.length },
+          { id: 'sales_invoices', label: 'ZATCA Invoices', icon: ReceiptText, count: invoices.length },
+          { id: 'sales_credit_notes', label: 'ZATCA Credit Notes', icon: FileMinus, count: creditNotes.length },
         ],
       },
       {
@@ -331,22 +389,22 @@ export default function App() {
         label: '2. Finance & Collections',
         icon: CreditCard,
         subModules: [
-          { id: 'fin_dashboard', label: 'CEO Executive Dashboard', icon: Layers },
-          { id: 'fin_collections', label: 'AR Customer Receipts', icon: CreditCard, count: receipts.length },
-          { id: 'fin_supplier_payments', label: 'AP Supplier Payments', icon: CreditCard, count: supplierPayments.length },
-          { id: 'fin_aging', label: 'AR / AP Aging', icon: FileText },
-          { id: 'fin_statements_of_account', label: 'Customer / Supplier Statements', icon: FileText },
-          { id: 'fin_bank_cash', label: 'Bank, Cash & Reconciliation', icon: CreditCard },
-          { id: 'fin_expenses', label: 'Expense Vouchers & Petty Cash', icon: Receipt, count: expenses.length },
-          { id: 'fin_fixed_assets', label: 'Fixed Assets & Depreciation', icon: Package, count: fixedAssets.length },
-          { id: 'fin_gl', label: 'General Ledger, CoA & JV', icon: FileText, count: glEntries.length },
-          { id: 'fin_statements', label: 'P&L & Balance Sheet', icon: FileText },
-          { id: 'fin_cash_flow', label: 'Cash Flow Statement', icon: FileText },
-          { id: 'fin_budget', label: 'Budget vs Actual', icon: Sliders },
-          { id: 'fin_vat_return', label: 'ZATCA VAT Return', icon: Percent },
-          { id: 'fin_profitability', label: 'Deal & Division Profitability', icon: Percent },
+          { id: 'fin_dashboard', label: 'CEO Executive Dashboard', icon: Gauge },
+          { id: 'fin_collections', label: 'AR Customer Receipts', icon: HandCoins, count: receipts.length },
+          { id: 'fin_supplier_payments', label: 'AP Supplier Payments', icon: Banknote, count: supplierPayments.length },
+          { id: 'fin_aging', label: 'AR / AP Aging', icon: CalendarCheck },
+          { id: 'fin_statements_of_account', label: 'Customer / Supplier Statements', icon: FileSpreadsheet },
+          { id: 'fin_bank_cash', label: 'Bank, Cash & Reconciliation', icon: Landmark },
+          { id: 'fin_expenses', label: 'Expense Vouchers & Petty Cash', icon: Wallet, count: expenses.length },
+          { id: 'fin_fixed_assets', label: 'Fixed Assets & Depreciation', icon: Building, count: fixedAssets.length },
+          { id: 'fin_gl', label: 'General Ledger, CoA & JV', icon: BookOpen, count: glEntries.length },
+          { id: 'fin_statements', label: 'P&L & Balance Sheet', icon: Scale },
+          { id: 'fin_cash_flow', label: 'Cash Flow Statement', icon: Waves },
+          { id: 'fin_budget', label: 'Budget vs Actual', icon: PieChart },
+          { id: 'fin_vat_return', label: 'ZATCA VAT Return', icon: Calculator },
+          { id: 'fin_profitability', label: 'Deal & Division Profitability', icon: LineChart },
           { id: 'fin_period_close', label: 'Period Lock & Year-End Close', icon: Lock },
-          { id: 'fin_zatca_advisor', label: 'ZATCA Wave & VAT', icon: QrCode },
+          { id: 'fin_zatca_advisor', label: 'ZATCA Wave & VAT', icon: ShieldCheck },
         ],
       },
       {
@@ -365,7 +423,7 @@ export default function App() {
         label: '4. Items & Services Catalog',
         icon: Package,
         subModules: [
-          { id: 'cat_items', label: 'Items Master (Goods/Services)', icon: Package, count: items.length },
+          { id: 'cat_items', label: 'Items Master (Goods/Services)', icon: Boxes, count: items.length },
         ],
       },
       {
@@ -383,7 +441,7 @@ export default function App() {
         subModules: [
           { id: 'set_salesmen', label: 'Team & Salesmen Master', icon: UserPlus, count: teamProfiles.length },
           { id: 'set_company', label: 'Company & ZATCA Profile', icon: Sliders },
-          { id: 'set_num_ranges', label: 'Document Number Ranges', icon: FileText, count: numberRanges.length },
+          { id: 'set_num_ranges', label: 'Document Number Ranges', icon: Hash, count: numberRanges.length },
         ],
       },
     ],
@@ -401,6 +459,7 @@ export default function App() {
 
   const selectSubModule = (modId, subId) => {
     setExpandedModules((prev) => ({ ...prev, [modId]: true }));
+    setObjectPage(null);
     setActiveSubModule(subId);
     setMobileDrawerOpen(false);
   };
@@ -607,6 +666,128 @@ export default function App() {
     () => getZatcaComplianceAdvice(annualTaxableRevenueSAR, company.zatcaPhase2Connected),
     [annualTaxableRevenueSAR, company.zatcaPhase2Connected]
   );
+
+  /* ---------------- Launchpad: live KPIs per app, insights & notifications ---------------- */
+  const openApp = (subId) => {
+    const parent = navTree.find((m) => m.subModules.some((s) => s.id === subId));
+    if (parent) selectSubModule(parent.id, subId);
+    window.scrollTo({ top: 0 });
+  };
+
+  const compactNum = (n) =>
+    new Intl.NumberFormat(lang === 'ar' ? 'ar-SA-u-nu-latn' : 'en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(Number(n) || 0);
+
+  const financeKpis = useMemo(() => {
+    const now = new Date();
+    const ym = now.toISOString().slice(0, 7);
+    const year = String(now.getFullYear());
+    const daysOld = (d) => (d ? Math.floor((now - new Date(d)) / 86400000) : 0);
+    const activeGl = glEntries.filter((e) => e.status !== 'void');
+    const sumGl = (pred) =>
+      activeGl.reduce((s, e) => s + (e.lines || []).reduce((a, l) => (pred(String(l.account_code || ''), e) ? a + Number(l.debit || 0) - Number(l.credit || 0) : a), 0), 0);
+
+    const openInvoices = invoices.filter((i) => Number(i.grand_total_sar || 0) - Number(i.paid_amount_sar || 0) > 0.01);
+    const arOpen = openInvoices.reduce((s, i) => s + Number(i.grand_total_sar || 0) - Number(i.paid_amount_sar || 0), 0);
+    const overdue = openInvoices.filter((i) => daysOld(i.issued_at || i.created_at) > 30);
+    const billedPOs = purchaseOrders.filter((p) => (p.status === 'billed' || p.bill_status === 'posted') && p.payment_status !== 'paid' && p.bill_status !== 'paid');
+    const apOpen = billedPOs.reduce(
+      (s, p) => s + Math.max(0, Number(p.total_landed_sar || 0) + Number(p.input_vat_sar ?? p.supplier_vat_sar ?? 0) - Number(p.paid_amount_sar || 0)),
+      0
+    );
+    const cash = sumGl((c) => c.length === 4 && c >= '1010' && c <= '1099');
+    const ytdRevenue =
+      invoices.filter((i) => String(i.issued_at || '').startsWith(year)).reduce((s, i) => s + Number(i.subtotal_sar || 0), 0) -
+      creditNotes.filter((c) => String(c.issued_at || '').startsWith(year)).reduce((s, c) => s + Number(c.subtotal_sar || 0), 0);
+    const ytdCogs = invoices.filter((i) => String(i.issued_at || '').startsWith(year)).reduce((s, i) => s + Number(i.landed_cost_sar || 0), 0);
+    const glNetProfit = -sumGl((c, e) => (c.startsWith('4') || c.startsWith('5')) && String(e.entry_date || '').startsWith(year) && e.source_module !== 'YEAR_END_CLOSE');
+    const outputVat = invoices.reduce((s, i) => s + Number(i.vat_sar || 0), 0) - creditNotes.reduce((s, c) => s + Number(c.vat_sar || 0), 0);
+    const inputVat =
+      purchaseOrders.filter((p) => p.is_ksa_vat_recoverable !== false).reduce((s, p) => s + Number(p.input_vat_sar || 0), 0) +
+      expenses.filter((e) => e.status !== 'void' && e.vat_recoverable).reduce((s, e) => s + Number(e.vat_sar || 0), 0);
+    const monthExpenses = expenses.filter((e) => e.status !== 'void' && String(e.expense_date || '').startsWith(ym)).reduce((s, e) => s + Number(e.total_sar || 0), 0);
+    const monthReceipts = receipts.filter((r) => String(r.received_at || r.created_at || '').startsWith(ym)).reduce((s, r) => s + Number(r.amount_sar || 0), 0);
+    const nbv = fixedAssets.filter((a) => a.status !== 'disposed').reduce((s, a) => s + Number(a.cost_sar || 0) - Number(a.accumulated_depreciation_sar || 0), 0);
+    const readyPayout = commissions.filter((c) => c.status === 'ready_for_payout');
+
+    return {
+      openInvoices, arOpen, overdue, billedPOs, apOpen, cash, ytdRevenue, ytdCogs, glNetProfit,
+      netVat: outputVat - inputVat, monthExpenses, monthReceipts, nbv, readyPayout,
+      grossMarginPct: ytdRevenue > 0 ? ((ytdRevenue - ytdCogs) / ytdRevenue) * 100 : 0,
+      openSOs: salesOrders.filter((s) => s.status !== 'delivered'),
+      awaitingBill: purchaseOrders.filter((p) => p.status === 'grn_completed'),
+    };
+  }, [invoices, creditNotes, purchaseOrders, glEntries, expenses, receipts, fixedAssets, commissions, salesOrders]);
+
+  const launchpadGroups = useMemo(() => {
+    const k = financeKpis;
+    const sar = (n) => `SAR ${compactNum(n)}`;
+    const tileData = {
+      sales_customers: { value: customers.length, unit: t(lang, 'tile.records') },
+      sales_quotes: { value: inquiries.length, unit: t(lang, 'tile.records') },
+      sales_orders: { value: k.openSOs.length, unit: `${t(lang, 'tile.open')} • ${sar(k.openSOs.reduce((s, o) => s + Number(o.grand_total_sar || 0), 0))}` },
+      sales_deliveries: { value: deliveryNotes.length, unit: t(lang, 'tile.records') },
+      sales_invoices: { value: k.openInvoices.length, unit: `${t(lang, 'tile.open')} • ${sar(k.arOpen)}`, tone: k.overdue.length ? 'critical' : 'info' },
+      sales_credit_notes: { value: creditNotes.length, unit: t(lang, 'tile.records') },
+      fin_dashboard: { value: compactNum(k.ytdRevenue), unit: 'SAR • YTD', tone: 'positive' },
+      fin_collections: { value: compactNum(k.monthReceipts), unit: 'SAR • MTD', tone: 'positive' },
+      fin_supplier_payments: { value: compactNum(k.apOpen), unit: `SAR ${t(lang, 'tile.open')}`, tone: k.apOpen > 0 ? 'critical' : 'neutral' },
+      fin_aging: { value: k.overdue.length, unit: `${t(lang, 'tile.overdue')} > 30d`, tone: k.overdue.length ? 'negative' : 'positive' },
+      fin_statements_of_account: { value: '' },
+      fin_bank_cash: { value: compactNum(k.cash), unit: 'SAR', tone: k.cash < 0 ? 'negative' : 'positive' },
+      fin_expenses: { value: compactNum(k.monthExpenses), unit: 'SAR • MTD', tone: 'neutral' },
+      fin_fixed_assets: { value: compactNum(k.nbv), unit: 'SAR NBV', tone: 'neutral' },
+      fin_gl: { value: glEntries.length, unit: t(lang, 'tile.entries') },
+      fin_statements: { value: compactNum(k.glNetProfit), unit: 'SAR • Net YTD', tone: k.glNetProfit < 0 ? 'negative' : 'positive' },
+      fin_cash_flow: { value: '' },
+      fin_budget: { value: budgets.length || '', unit: budgets.length ? t(lang, 'tile.records') : '' },
+      fin_vat_return: { value: compactNum(k.netVat), unit: 'SAR VAT', tone: k.netVat > 0 ? 'critical' : 'positive' },
+      fin_profitability: { value: `${k.grossMarginPct.toFixed(1)}%`, unit: 'Gross margin', tone: k.grossMarginPct < 10 ? 'critical' : 'positive' },
+      fin_period_close: { value: '', subtitle: glLockDate ? `🔒 ${glLockDate}` : '' },
+      fin_zatca_advisor: { value: '', subtitle: zatcaAdvice.wave },
+      pur_vendors: { value: vendors.length, unit: t(lang, 'tile.records') },
+      pur_orders: { value: purchaseOrders.filter((p) => p.status === 'po_issued').length, unit: t(lang, 'tile.open') },
+      pur_grn: { value: k.awaitingBill.length, unit: 'awaiting bill', tone: k.awaitingBill.length ? 'critical' : 'neutral' },
+      pur_bills: { value: k.billedPOs.length, unit: 'unpaid', tone: k.billedPOs.length ? 'critical' : 'neutral' },
+      cat_items: { value: items.length, unit: t(lang, 'tile.records') },
+      comm_ledger: { value: compactNum(k.readyPayout.reduce((s, c) => s + Number(c.unlocked_commission_sar || 0), 0)), unit: 'SAR ready', tone: 'positive' },
+      set_salesmen: { value: teamProfiles.length, unit: t(lang, 'tile.records') },
+      set_company: { value: '' },
+      set_num_ranges: { value: numberRanges.length, unit: t(lang, 'tile.records') },
+    };
+    return navTree.map((mod) => ({
+      id: mod.id,
+      icon: mod.icon,
+      title: t(lang, `nav.${mod.id}`, mod.label),
+      tiles: mod.subModules.map((sub) => ({
+        id: sub.id,
+        title: t(lang, `nav.${sub.id}`, sub.label),
+        icon: sub.icon,
+        ...tileData[sub.id],
+        onClick: () => openApp(sub.id),
+      })),
+    }));
+  }, [navTree, financeKpis, lang, customers.length, inquiries.length, deliveryNotes.length, creditNotes.length, glEntries.length, budgets.length, glLockDate, zatcaAdvice.wave, vendors.length, purchaseOrders, items.length, teamProfiles.length, numberRanges.length]);
+
+  const launchpadInsights = useMemo(() => {
+    const k = financeKpis;
+    return [
+      { id: 'rev', label: lang === 'ar' ? 'الإيرادات منذ بداية السنة' : 'Revenue YTD', value: `SAR ${compactNum(k.ytdRevenue)}`, tone: 'info', footer: `${k.grossMarginPct.toFixed(1)}% gross margin`, trend: k.grossMarginPct >= 0 ? 'up' : 'down', onClick: () => openApp('fin_dashboard') },
+      { id: 'ar', label: lang === 'ar' ? 'الذمم المدينة المفتوحة' : 'Open Receivables', value: `SAR ${compactNum(k.arOpen)}`, tone: k.overdue.length ? 'critical' : 'neutral', footer: `${k.overdue.length} ${t(lang, 'tile.overdue')} > 30d`, onClick: () => openApp('fin_aging') },
+      { id: 'cash', label: lang === 'ar' ? 'النقدية والبنوك' : 'Cash & Bank', value: `SAR ${compactNum(k.cash)}`, tone: k.cash < 0 ? 'negative' : 'positive', footer: `AP open SAR ${compactNum(k.apOpen)}`, onClick: () => openApp('fin_bank_cash') },
+      { id: 'vat', label: lang === 'ar' ? 'صافي ضريبة القيمة المضافة' : 'Net VAT Payable', value: `SAR ${compactNum(k.netVat)}`, tone: k.netVat > 0 ? 'critical' : 'positive', footer: 'Output − input VAT', onClick: () => openApp('fin_vat_return') },
+    ];
+  }, [financeKpis, lang]);
+
+  const shellNotifications = useMemo(() => {
+    const k = financeKpis;
+    const list = [];
+    if (missingTables.length) list.push({ id: 'schema', tone: 'negative', text: t(lang, 'notif.schema', '', { n: missingTables.length }) });
+    if (k.overdue.length) list.push({ id: 'overdue', tone: 'negative', text: t(lang, 'notif.overdueInvoices', '', { n: k.overdue.length }), onClick: () => openApp('fin_aging') });
+    if (k.awaitingBill.length) list.push({ id: 'grn', tone: 'critical', text: t(lang, 'notif.unbilledGrn', '', { n: k.awaitingBill.length }), onClick: () => openApp('pur_grn') });
+    if (k.billedPOs.length) list.push({ id: 'ap', tone: 'critical', text: t(lang, 'notif.payablesDue', '', { n: k.billedPOs.length }), onClick: () => openApp('fin_supplier_payments') });
+    if (k.readyPayout.length) list.push({ id: 'comm', tone: 'info', text: t(lang, 'notif.readyPayout', '', { n: k.readyPayout.length }), onClick: () => openApp('comm_ledger') });
+    return list;
+  }, [financeKpis, missingTables.length, lang]);
 
   // Create New Salesman / Team Member (Provisions Supabase Auth User + team_profiles)
   const handleCreateTeamMember = async (e) => {
@@ -1284,8 +1465,8 @@ export default function App() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
-        <RefreshCw className="w-6 h-6 animate-spin text-blue-400" />
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <RefreshCw className="w-6 h-6 animate-spin text-blue-600" />
       </div>
     );
   }
@@ -1296,190 +1477,163 @@ export default function App() {
 
   const selectedInq = inquiries.find((i) => i.id === selectedInqId) || null;
 
-  const renderSidebarNav = (isMobile = false) => (
-    <div className="flex flex-col h-full bg-slate-900 text-slate-200 select-none">
-      <div className="p-3.5 border-b border-slate-800 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-base shrink-0">
-            H
-          </div>
-          {(!sidebarCollapsed || isMobile) && (
-            <div className="min-w-0">
-              <div className="font-bold text-xs text-white truncate">{company.nameEn}</div>
-              <div className="text-[10px] text-emerald-400 font-semibold">
-                ERP Phase 1 • {syncStatus === 'live' ? 'Live' : 'Sync'}
-              </div>
-            </div>
-          )}
-        </div>
+  const activeParent = navTree.find((m) => m.subModules.some((s) => s.id === activeSubModule));
+  const activeSub = activeParent?.subModules.find((s) => s.id === activeSubModule);
+  const isHome = activeSubModule === 'home';
+  const view = objectPage ? '__object__' : activeSubModule;
+  const objInvoice = objectPage?.type === 'invoice' ? invoices.find((x) => x.id === objectPage.id) : null;
+  const objSO = objectPage?.type === 'so' ? salesOrders.find((x) => x.id === objectPage.id) : null;
+  const objPO = objectPage?.type === 'po' ? purchaseOrders.find((x) => x.id === objectPage.id) : null;
+  const goHome = () => {
+    setObjectPage(null);
+    setActiveSubModule('home');
+    setMobileDrawerOpen(false);
+    window.scrollTo({ top: 0 });
+  };
 
-        {isMobile ? (
-          <button onClick={() => setMobileDrawerOpen(false)} className="p-1.5 rounded-lg bg-slate-800 text-slate-300">
-            <X className="w-4 h-4" />
-          </button>
-        ) : (
-          <button
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
-            title={sidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
-          >
-            {sidebarCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
-          </button>
-        )}
-      </div>
-
-      <nav className="flex-1 overflow-y-auto p-2.5 space-y-1.5">
-        {navTree.map((mod) => {
-          const ModIcon = mod.icon;
-          const isExpanded = Boolean(expandedModules[mod.id]);
-          const hasActiveSub = mod.subModules.some((s) => s.id === activeSubModule);
-
-          return (
-            <div key={mod.id} className="space-y-1">
-              <button
-                onClick={() => toggleMainModule(mod.id)}
-                className={`w-full flex items-center justify-between px-2.5 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer ${
-                  hasActiveSub
-                    ? 'bg-slate-800/90 text-white'
-                    : 'text-slate-300 hover:bg-slate-800/50 hover:text-white'
-                }`}
-                title={mod.label}
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <ModIcon className={`w-4 h-4 shrink-0 ${hasActiveSub ? 'text-blue-400' : 'text-slate-400'}`} />
-                  {(!sidebarCollapsed || isMobile) && <span className="truncate">{mod.label}</span>}
-                </div>
-                {(!sidebarCollapsed || isMobile) && (
-                  isExpanded ? <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                )}
-              </button>
-
-              {isExpanded && (!sidebarCollapsed || isMobile) && (
-                <div className="ml-3 pl-2.5 border-l border-slate-800 space-y-0.5">
-                  {mod.subModules.map((sub) => {
-                    const SubIcon = sub.icon;
-                    const isActive = activeSubModule === sub.id;
-                    return (
-                      <button
-                        key={sub.id}
-                        onClick={() => selectSubModule(mod.id, sub.id)}
-                        className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
-                          isActive
-                            ? 'bg-blue-600 text-white shadow-sm'
-                            : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <SubIcon className="w-3.5 h-3.5 shrink-0" />
-                          <span className="truncate">{sub.label}</span>
-                        </div>
-                        {typeof sub.count === 'number' && (
-                          <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${isActive ? 'bg-blue-800 text-white' : 'bg-slate-800 text-slate-400'}`}>
-                            {sub.count}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </nav>
-
-      <div className="p-3 border-t border-slate-800 flex items-center justify-between gap-2">
-        {(!sidebarCollapsed || isMobile) && (
-          <div className="min-w-0">
-            <div className="text-xs font-bold text-white truncate">{profile?.full_name}</div>
-            <div className="text-[10px] text-slate-400 truncate">{profile?.role_label}</div>
-          </div>
-        )}
-        <button
-          onClick={() => supabase.auth.signOut()}
-          className="p-2 rounded-xl bg-slate-800 hover:bg-rose-950 hover:text-rose-300 text-slate-400 cursor-pointer shrink-0"
-          title="Sign Out"
-        >
-          <LogOut className="w-4 h-4" />
-        </button>
-      </div>
-    </div>
+  const renderSideNav = (isMobile = false) => (
+    <SideNavigation
+      lang={lang}
+      navTree={navTree}
+      activeId={activeSubModule}
+      expanded={expandedModules}
+      onToggleGroup={toggleMainModule}
+      onSelect={selectSubModule}
+      collapsed={sidebarCollapsed}
+      onToggleCollapsed={() => setSidebarCollapsed(!sidebarCollapsed)}
+      onHome={goHome}
+      isMobile={isMobile}
+      onClose={() => setMobileDrawerOpen(false)}
+    />
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex">
-      <aside className={`hidden lg:block shrink-0 border-r border-slate-800 transition-all duration-200 ${sidebarCollapsed ? 'w-16' : 'w-68'}`}>
-        <div className="sticky top-0 h-screen">{renderSidebarNav(false)}</div>
-      </aside>
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col">
+      <ShellBar
+        lang={lang}
+        company={company}
+        appTitle={activeSub ? t(lang, `nav.${activeSub.id}`, activeSub.label) : ''}
+        isHome={isHome}
+        onHome={goHome}
+        onToggleNav={() => {
+          if (window.innerWidth < 1024) setMobileDrawerOpen(true);
+          else setSidebarCollapsed(!sidebarCollapsed);
+        }}
+        onSearch={() => setGlobalSearchOpen(true)}
+        notifications={shellNotifications}
+        profile={profile}
+        prefs={uxPrefs}
+        setPrefs={setUxPrefs}
+        onSignOut={() => supabase.auth.signOut()}
+        syncStatus={syncStatus}
+        ytdSales={formatSAR(annualTaxableRevenueSAR)}
+      />
 
       {mobileDrawerOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden flex">
-          <div className="w-72 max-w-[85vw] h-full shadow-2xl">{renderSidebarNav(true)}</div>
+        <div className="fixed inset-0 z-50 lg:hidden flex no-print">
+          <div className="w-72 max-w-[85vw] h-full shadow-2xl">{renderSideNav(true)}</div>
           <div className="flex-1 bg-slate-950/60" onClick={() => setMobileDrawerOpen(false)} />
         </div>
       )}
 
+      <div className="flex-1 flex min-h-0">
+        <aside className={`hidden lg:block shrink-0 transition-all duration-200 no-print ${sidebarCollapsed ? 'w-16' : 'w-64'}`}>
+          <div className="sticky top-12 h-[calc(100vh-3rem)]">{renderSideNav(false)}</div>
+        </aside>
+
       <div className="flex-1 min-w-0 flex flex-col">
-        {/* TOP HEADER WITH GLOBAL SMART DISCOVERY BAR */}
-        <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3 flex items-center justify-between gap-3 sticky top-0 z-20">
-          <div className="flex items-center gap-3 min-w-0">
-            <button
-              onClick={() => setMobileDrawerOpen(true)}
-              className="lg:hidden p-2 rounded-xl bg-slate-100 text-slate-700"
-              aria-label="Open ERP Navigation"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
-            <div className="min-w-0 hidden sm:block">
-              <div className="text-xs font-bold text-slate-900 truncate">{company.nameEn}</div>
-              <div className="text-[11px] text-slate-500 truncate">VAT: {company.vatNumber}</div>
-            </div>
-          </div>
 
-          {/* Global Smart Search & Discovery Trigger */}
-          <button
-            onClick={() => setGlobalSearchOpen(true)}
-            className="flex-1 max-w-md mx-2 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200/80 border border-slate-200 text-slate-500 text-xs flex items-center justify-between gap-2 transition cursor-pointer"
-          >
-            <span className="flex items-center gap-2 truncate">
-              <Search className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-              <span className="truncate">Smart Search: Customers, Vendors, Items, Invoices...</span>
-            </span>
-            <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono bg-white border border-slate-300 rounded text-slate-500">
-              Ctrl K
-            </kbd>
-          </button>
-
-          <div className="text-right shrink-0">
-            <div className="text-[10px] uppercase font-semibold text-slate-400">YTD Sales</div>
-            <div className="text-xs sm:text-sm font-bold text-blue-700">SAR {formatSAR(annualTaxableRevenueSAR)}</div>
-          </div>
-        </header>
-
-        <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-5 space-y-5">
-          {missingTables.length > 0 && (
-            <div className="p-3 rounded-2xl border border-red-200 bg-red-50 text-red-900 text-xs flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-              <div>
-                <span className="font-bold">Database setup incomplete: </span>
-                these tables are missing in Supabase: <span className="font-mono">{missingTables.join(', ')}</span>. Run{' '}
-                <span className="font-mono">supabase/schema_existing.sql</span> then <span className="font-mono">supabase/schema_finance.sql</span> in the
-                Supabase SQL Editor. Records in these modules cannot be saved until then.
-              </div>
-            </div>
+        <main className={`flex-1 w-full mx-auto px-4 sm:px-6 py-5 space-y-5 ${isHome ? 'max-w-7xl' : 'max-w-6xl'}`}>
+          {!isHome && activeSub && !objectPage && (
+            <PageHeader
+              lang={lang}
+              crumbs={[
+                { label: t(lang, 'shell.home'), onClick: goHome },
+                { label: t(lang, `nav.${activeParent.id}`, activeParent.label), onClick: () => setExpandedModules((p) => ({ ...p, [activeParent.id]: true })) },
+                { label: t(lang, `nav.${activeSub.id}`, activeSub.label) },
+              ]}
+              title={t(lang, `nav.${activeSub.id}`, activeSub.label)}
+              subtitle={`${company.nameEn} • VAT ${company.vatNumber}`}
+              icon={activeSub.icon}
+            />
           )}
-          <div className={`p-3 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs ${zatcaAdvice.badgeClass}`}>
-            <div className="flex items-start sm:items-center gap-2">
-              <QrCode className="w-4 h-4 shrink-0 mt-0.5 sm:mt-0" />
-              <div>
-                <span className="font-bold">{zatcaAdvice.wave}: </span>
-                <span>{zatcaAdvice.statusText}</span>
-              </div>
-            </div>
-          </div>
+
+          {missingTables.length > 0 && (
+            <MessageStrip type="error">
+              <span className="font-bold">{t(lang, 'notif.schema', '', { n: missingTables.length })}: </span>
+              <span className="font-mono">{missingTables.join(', ')}</span>. Run <span className="font-mono">supabase/schema_existing.sql</span> then{' '}
+              <span className="font-mono">supabase/schema_finance.sql</span> in the Supabase SQL Editor.
+            </MessageStrip>
+          )}
+
+          {(isHome || activeSubModule === 'sales_invoices' || activeSubModule === 'fin_zatca_advisor') && !objectPage && (
+            <MessageStrip type={company.zatcaPhase2Connected ? 'success' : 'information'}>
+              <span className="font-bold">{zatcaAdvice.wave}: </span>
+              {zatcaAdvice.statusText}
+            </MessageStrip>
+          )}
+
+          {isHome && !objectPage && <Launchpad lang={lang} profile={profile} groups={launchpadGroups} insights={launchpadInsights} />}
+
+          {/* ===== OBJECT PAGES (full-page document detail) ===== */}
+          {objInvoice && (
+            <InvoiceObjectPage
+              lang={lang}
+              invoice={objInvoice}
+              company={company}
+              receipts={receipts}
+              creditNotes={creditNotes}
+              glEntries={glEntries}
+              commissions={commissions}
+              salesOrders={salesOrders}
+              deliveryNotes={deliveryNotes}
+              onBack={closeObject}
+              onRecordPayment={(inv) => {
+                setPaymentModalInv(inv);
+                setPaymentAmount(Math.max(0, Number(inv.grand_total_sar) - Number(inv.paid_amount_sar || 0)).toFixed(2));
+              }}
+              onPrint={(inv) => setPreviewInvoice(inv)}
+              onOpenSalesOrder={(so) => openObject('so', so.id)}
+            />
+          )}
+          {objSO && (
+            <SalesOrderObjectPage
+              lang={lang}
+              so={objSO}
+              deliveryNotes={deliveryNotes}
+              invoices={invoices}
+              purchaseOrders={purchaseOrders}
+              receipts={receipts}
+              glEntries={glEntries}
+              onBack={closeObject}
+              onPrint={(so) => setPreviewSO(so)}
+              onDeliver={(so) => openDeliveryModal(so)}
+              onOpenInvoice={(inv) => openObject('invoice', inv.id)}
+              onOpenPurchaseOrder={(po) => openObject('po', po.id)}
+            />
+          )}
+          {objPO && (
+            <PurchaseOrderObjectPage
+              lang={lang}
+              po={objPO}
+              supplierPayments={supplierPayments}
+              glEntries={glEntries}
+              vendors={vendors}
+              salesOrders={salesOrders}
+              onBack={closeObject}
+              onPrint={(po) => setPreviewPO(po)}
+              onPay={() => selectSubModule('finance', 'fin_supplier_payments')}
+              onOpenSalesOrder={(so) => openObject('so', so.id)}
+            />
+          )}
+          {objectPage && !objInvoice && !objSO && !objPO && (
+            <MessageStrip type="warning" onClose={closeObject}>
+              This document is no longer available.
+            </MessageStrip>
+          )}
 
           {/* MASTER DATA VIEWS IN THEIR RELATED MODULES */}
-          {activeSubModule === 'sales_customers' && (
+          {view === 'sales_customers' && (
             <CustomersMasterView
               supabase={supabase}
               customers={customers}
@@ -1488,7 +1642,7 @@ export default function App() {
             />
           )}
 
-          {activeSubModule === 'pur_vendors' && (
+          {view === 'pur_vendors' && (
             <VendorsMasterView
               supabase={supabase}
               vendors={vendors}
@@ -1497,7 +1651,7 @@ export default function App() {
             />
           )}
 
-          {activeSubModule === 'cat_items' && (
+          {view === 'cat_items' && (
             <ItemsMasterView
               supabase={supabase}
               items={items}
@@ -1510,7 +1664,7 @@ export default function App() {
           )}
 
           {/* SUB-MODULE: 1.2 INQUIRIES & QUOTES */}
-          {activeSubModule === 'sales_quotes' && (
+          {view === 'sales_quotes' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-base sm:text-lg font-bold text-slate-900">Inquiries &amp; Commercial Quotations</h2>
@@ -1533,8 +1687,10 @@ export default function App() {
                   </button>
                 </div>
               ) : (
+                <SmartFilterBar lang={lang} rows={inquiries} storageKey="quotes" searchKeys={['id', 'clientName', 'contactPerson', 'assignedSalesName']} filters={[{ key: 'status', label: lang === 'ar' ? 'الحالة' : 'Status', type: 'select' }, { key: 'division', label: lang === 'ar' ? 'القسم' : 'Division', type: 'select' }, { key: 'assignedSalesName', label: lang === 'ar' ? 'المندوب' : 'Salesman', type: 'select' }]} sortOptions={[{ key: 'updatedAt', label: 'Updated' }, { key: 'clientName', label: 'Client' }]} csv={{ filename: 'Inquiries', columns: [{ key: 'id', label: 'Inquiry #' }, { key: 'clientName', label: 'Client' }, { key: 'status', label: 'Status' }, { key: 'division', label: 'Division' }, { key: 'assignedSalesName', label: 'Salesman' }] }}>
+                {(rows) => (
                 <div className="grid gap-3">
-                  {inquiries.map((inq) => {
+                  {rows.map((inq) => {
                     const fin = computeQuoteFinancials(inq, fxRates);
                     return (
                       <div
@@ -1579,12 +1735,14 @@ export default function App() {
                     );
                   })}
                 </div>
+                )}
+                </SmartFilterBar>
               )}
             </div>
           )}
 
           {/* SUB-MODULE: 1.3 SALES ORDERS */}
-          {activeSubModule === 'sales_orders' && (
+          {view === 'sales_orders' && (
             <div className="space-y-4">
               <div>
                 <h2 className="text-base sm:text-lg font-bold text-slate-900">Sales Orders (SO)</h2>
@@ -1596,13 +1754,15 @@ export default function App() {
                   No Sales Orders yet. Convert an approved quote under <strong>Sales &amp; Fulfillment → Inquiries &amp; Quotes</strong>.
                 </div>
               ) : (
+                <SmartFilterBar lang={lang} rows={salesOrders} storageKey="salesOrders" searchKeys={['so_number', 'client_name', 'salesman_name']} filters={[{ key: 'status', label: lang === 'ar' ? 'الحالة' : 'Status', type: 'select' }, { key: 'division', label: lang === 'ar' ? 'القسم' : 'Division', type: 'select' }, { key: 'created_at', label: lang === 'ar' ? 'التاريخ' : 'Date', type: 'daterange' }, { key: 'grand_total_sar', label: lang === 'ar' ? 'القيمة' : 'Amount', type: 'numberrange' }]} sortOptions={[{ key: 'created_at', label: 'Date' }, { key: 'grand_total_sar', label: 'Amount' }, { key: 'client_name', label: 'Client' }]} defaultSort={{ key: 'created_at', dir: 'desc' }} csv={{ filename: 'Sales_Orders', columns: [{ key: 'so_number', label: 'SO #' }, { key: 'client_name', label: 'Client' }, { key: 'division', label: 'Division' }, { key: 'status', label: 'Status' }, { key: 'grand_total_sar', label: 'Total (SAR)' }, { key: 'created_at', label: 'Date' }] }}>
+                {(rows) => (
                 <div className="grid gap-4">
-                  {salesOrders.map((so) => (
+                  {rows.map((so) => (
                     <div key={so.id} className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 space-y-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded">{so.so_number} <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded font-bold ${so.division === 'IT & ELV' ? 'bg-violet-100 text-violet-800' : 'bg-emerald-100 text-emerald-800'}`}>{so.division || 'MEP'}</span> <div className="mt-1"><button type="button" onClick={(e) => { e.stopPropagation(); setPreviewSO(so); }} className="no-print px-2 py-1 text-[11px] rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-semibold inline-flex items-center gap-1 cursor-pointer transition mr-1"><span>Preview A4 SO</span></button><ShareDocumentButtons company={company} customers={customers} docType="Sales Order" docNumber={so.so_number} clientName={so.client_name} division={so.division} totalSar={so.grand_total_sar} status={so.status} compact /></div></span>
+                            <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded"><button type="button" onClick={(e) => { e.stopPropagation(); openObject('so', so.id); }} className="underline decoration-dotted underline-offset-2 hover:text-blue-900 cursor-pointer">{so.so_number}</button> <span className={`ms-1.5 text-[10px] px-1.5 py-0.5 rounded font-bold ${so.division === 'IT & ELV' ? 'bg-violet-100 text-violet-800' : 'bg-emerald-100 text-emerald-800'}`}>{so.division || 'MEP'}</span> <div className="mt-1"><button type="button" onClick={(e) => { e.stopPropagation(); setPreviewSO(so); }} className="no-print px-2 py-1 text-[11px] rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-semibold inline-flex items-center gap-1 cursor-pointer transition mr-1"><span>Preview A4 SO</span></button><ShareDocumentButtons company={company} customers={customers} docType="Sales Order" docNumber={so.so_number} clientName={so.client_name} division={so.division} totalSar={so.grand_total_sar} status={so.status} compact /></div></span>
                             <span className="text-xs font-semibold uppercase px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
                               {so.status.replace('_', ' ')}
                             </span>
@@ -1651,12 +1811,14 @@ export default function App() {
                     </div>
                   ))}
                 </div>
+                )}
+                </SmartFilterBar>
               )}
             </div>
           )}
 
           {/* SUB-MODULE: 1.4 DELIVERIES */}
-          {activeSubModule === 'sales_deliveries' && (
+          {view === 'sales_deliveries' && (
             <div className="space-y-4">
               <div>
                 <h2 className="text-base sm:text-lg font-bold text-slate-900">Delivery Notes (Full &amp; Partial Dispatches)</h2>
@@ -1668,8 +1830,10 @@ export default function App() {
                   No Delivery Notes recorded yet.
                 </div>
               ) : (
+                <SmartFilterBar lang={lang} rows={deliveryNotes} storageKey="deliveries" searchKeys={['dn_number', 'so_number', 'client_name']} filters={[{ key: 'delivery_type', label: lang === 'ar' ? 'النوع' : 'Type', type: 'select' }, { key: 'division', label: lang === 'ar' ? 'القسم' : 'Division', type: 'select' }, { key: 'delivered_at', label: lang === 'ar' ? 'التاريخ' : 'Date', type: 'daterange' }]} sortOptions={[{ key: 'delivered_at', label: 'Date' }, { key: 'client_name', label: 'Client' }]} defaultSort={{ key: 'delivered_at', dir: 'desc' }} csv={{ filename: 'Delivery_Notes', columns: [{ key: 'dn_number', label: 'DN #' }, { key: 'so_number', label: 'SO #' }, { key: 'client_name', label: 'Client' }, { key: 'delivery_type', label: 'Type' }, { key: 'delivered_at', label: 'Date' }] }}>
+                {(rows) => (
                 <div className="grid gap-3">
-                  {deliveryNotes.map((dn) => {
+                  {rows.map((dn) => {
                     const alreadyInvoiced = invoices.some((inv) => inv.dn_id === dn.id);
                     return (
                       <div key={dn.id} className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3">
@@ -1698,14 +1862,16 @@ export default function App() {
                     );
                   })}
                 </div>
+                )}
+                </SmartFilterBar>
               )}
             </div>
           )}
 
-          {activeSubModule === 'sales_credit_notes' && (<CreditNotesView supabase={supabase} company={company} invoices={invoices} creditNotes={creditNotes} commissions={commissions} profile={profile} onRefresh={refreshAllErpData} />)}
+          {view === 'sales_credit_notes' && (<CreditNotesView supabase={supabase} company={company} invoices={invoices} creditNotes={creditNotes} commissions={commissions} profile={profile} onRefresh={refreshAllErpData} />)}
 
           {/* SUB-MODULE: 1.5 ZATCA INVOICES */}
-          {activeSubModule === 'sales_invoices' && (
+          {view === 'sales_invoices' && (
             <div className="space-y-4">
               <div>
                 <h2 className="text-base sm:text-lg font-bold text-slate-900">ZATCA E-Invoices (Phase 1 TLV QR &amp; Phase 2 Ready)</h2>
@@ -1717,14 +1883,16 @@ export default function App() {
                   No ZATCA invoices issued yet.
                 </div>
               ) : (
+                <SmartFilterBar lang={lang} rows={invoices} storageKey="invoices" searchKeys={['invoice_number', 'client_name', 'so_number', 'salesman_name']} filters={[{ key: 'payment_status', label: lang === 'ar' ? 'حالة السداد' : 'Payment', type: 'select' }, { key: 'division', label: lang === 'ar' ? 'القسم' : 'Division', type: 'select' }, { key: 'invoice_type', label: lang === 'ar' ? 'النوع' : 'Type', type: 'select' }, { key: 'issued_at', label: lang === 'ar' ? 'التاريخ' : 'Date', type: 'daterange' }, { key: 'grand_total_sar', label: lang === 'ar' ? 'القيمة' : 'Amount', type: 'numberrange' }]} sortOptions={[{ key: 'issued_at', label: 'Date' }, { key: 'grand_total_sar', label: 'Amount' }, { key: 'client_name', label: 'Client' }]} defaultSort={{ key: 'issued_at', dir: 'desc' }} csv={{ filename: 'ZATCA_Invoices', columns: [{ key: 'invoice_number', label: 'Invoice #' }, { key: 'client_name', label: 'Client' }, { key: 'client_vat', label: 'Client VAT' }, { key: 'division', label: 'Division' }, { key: 'subtotal_sar', label: 'Subtotal (SAR)' }, { key: 'vat_sar', label: 'VAT (SAR)' }, { key: 'grand_total_sar', label: 'Total (SAR)' }, { key: 'paid_amount_sar', label: 'Paid (SAR)' }, { key: 'payment_status', label: 'Status' }, { key: 'issued_at', label: 'Issued' }] }}>
+                {(rows) => (
                 <div className="grid gap-3">
-                  {invoices.map((inv) => {
+                  {rows.map((inv) => {
                     const balanceDue = Math.max(0, Number(inv.grand_total_sar) - Number(inv.paid_amount_sar || 0));
                     return (
                       <div key={inv.id} className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div>
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded">{inv.invoice_number} <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded font-bold ${inv.division === 'IT & ELV' ? 'bg-violet-100 text-violet-800' : 'bg-emerald-100 text-emerald-800'}`}>{inv.division || 'MEP'}</span> <div className="mt-1"><ShareDocumentButtons company={company} customers={customers} docType="ZATCA Tax Invoice" docNumber={inv.invoice_number} clientName={inv.client_name} division={inv.division} totalSar={inv.grand_total_sar} status={inv.payment_status} compact /></div></span>
+                            <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded"><button type="button" onClick={(e) => { e.stopPropagation(); openObject('invoice', inv.id); }} className="underline decoration-dotted underline-offset-2 hover:text-blue-900 cursor-pointer">{inv.invoice_number}</button> <span className={`ms-1.5 text-[10px] px-1.5 py-0.5 rounded font-bold ${inv.division === 'IT & ELV' ? 'bg-violet-100 text-violet-800' : 'bg-emerald-100 text-emerald-800'}`}>{inv.division || 'MEP'}</span> <div className="mt-1"><ShareDocumentButtons company={company} customers={customers} docType="ZATCA Tax Invoice" docNumber={inv.invoice_number} clientName={inv.client_name} division={inv.division} totalSar={inv.grand_total_sar} status={inv.payment_status} compact /></div></span>
                             <span className="text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full">
                               ZATCA {inv.zatca_status === 'cleared' ? 'Phase 2 Cleared' : 'Phase 1 TLV QR'}
                             </span>
@@ -1767,13 +1935,15 @@ export default function App() {
                     );
                   })}
                 </div>
+                )}
+                </SmartFilterBar>
               )}
             </div>
           )}
 
           {/* SUB-MODULE: 2.1 AR CUSTOMER RECEIPTS */}
           {/* ===== FINANCE & ACCOUNTING SUITE ===== */}
-          {activeSubModule === 'fin_dashboard' && (
+          {view === 'fin_dashboard' && (
             <ExecutiveDashboardView
               company={company}
               profile={profile}
@@ -1795,11 +1965,11 @@ export default function App() {
               }}
             />
           )}
-          {activeSubModule === 'fin_supplier_payments' && (
+          {view === 'fin_supplier_payments' && (
             <SupplierPaymentsView supabase={supabase} purchaseOrders={purchaseOrders} supplierPayments={supplierPayments} profile={profile} onRefresh={refreshAllErpData} />
           )}
-          {activeSubModule === 'fin_aging' && <AgingReportView invoices={invoices} purchaseOrders={purchaseOrders} />}
-          {activeSubModule === 'fin_statements_of_account' && (
+          {view === 'fin_aging' && <AgingReportView invoices={invoices} purchaseOrders={purchaseOrders} />}
+          {view === 'fin_statements_of_account' && (
             <PartyStatementsView
               company={company}
               customers={customers}
@@ -1811,34 +1981,34 @@ export default function App() {
               supplierPayments={supplierPayments}
             />
           )}
-          {activeSubModule === 'fin_bank_cash' && (
+          {view === 'fin_bank_cash' && (
             <BankCashView supabase={supabase} glAccounts={glAccounts} glEntries={glEntries} bankReconciliations={bankReconciliations} profile={profile} lockDate={glLockDate} onRefresh={refreshAllErpData} />
           )}
-          {activeSubModule === 'fin_expenses' && (
+          {view === 'fin_expenses' && (
             <ExpenseVouchersView supabase={supabase} glAccounts={glAccounts} expenses={expenses} vendors={vendors} profile={profile} lockDate={glLockDate} onRefresh={refreshAllErpData} />
           )}
-          {activeSubModule === 'fin_fixed_assets' && (
+          {view === 'fin_fixed_assets' && (
             <FixedAssetsView supabase={supabase} glAccounts={glAccounts} fixedAssets={fixedAssets} profile={profile} lockDate={glLockDate} onRefresh={refreshAllErpData} />
           )}
-          {activeSubModule === 'fin_gl' && (
+          {view === 'fin_gl' && (
             <GeneralLedgerView supabase={supabase} glAccounts={glAccounts} glEntries={glEntries} profile={profile} onRefresh={refreshAllErpData} />
           )}
-          {activeSubModule === 'fin_statements' && <FinancialStatementsView company={company} glAccounts={glAccounts} glEntries={glEntries} />}
-          {activeSubModule === 'fin_cash_flow' && <CashFlowStatementView company={company} glAccounts={glAccounts} glEntries={glEntries} />}
-          {activeSubModule === 'fin_budget' && (
+          {view === 'fin_statements' && <FinancialStatementsView company={company} glAccounts={glAccounts} glEntries={glEntries} />}
+          {view === 'fin_cash_flow' && <CashFlowStatementView company={company} glAccounts={glAccounts} glEntries={glEntries} />}
+          {view === 'fin_budget' && (
             <BudgetVsActualView supabase={supabase} glAccounts={glAccounts} glEntries={glEntries} budgets={budgets} onRefresh={refreshAllErpData} />
           )}
-          {activeSubModule === 'fin_vat_return' && (
+          {view === 'fin_vat_return' && (
             <ZatcaVatReturnView company={company} invoices={invoices} creditNotes={creditNotes} purchaseOrders={purchaseOrders} expenses={expenses} />
           )}
-          {activeSubModule === 'fin_profitability' && (
+          {view === 'fin_profitability' && (
             <DealProfitabilityView invoices={invoices} creditNotes={creditNotes} commissions={commissions} supplierPayments={supplierPayments} salesOrders={salesOrders} />
           )}
-          {activeSubModule === 'fin_period_close' && (
+          {view === 'fin_period_close' && (
             <PeriodCloseView supabase={supabase} glAccounts={glAccounts} glEntries={glEntries} lockDate={glLockDate} profile={profile} onRefresh={refreshAllErpData} />
           )}
 
-          {activeSubModule === 'fin_collections' && (
+          {view === 'fin_collections' && (
             <div className="space-y-4">
               <div>
                 <h2 className="text-base sm:text-lg font-bold text-slate-900">Accounts Receivable &amp; Customer Receipts</h2>
@@ -1850,11 +2020,13 @@ export default function App() {
                   No customer payments recorded yet.
                 </div>
               ) : (
+                <SmartFilterBar lang={lang} rows={receipts} storageKey="receipts" searchKeys={['receipt_number', 'invoice_number', 'client_name', 'reference_no']} filters={[{ key: 'payment_method', label: lang === 'ar' ? 'طريقة الدفع' : 'Method', type: 'select' }, { key: 'received_at', label: lang === 'ar' ? 'التاريخ' : 'Date', type: 'daterange' }, { key: 'amount_sar', label: lang === 'ar' ? 'المبلغ' : 'Amount', type: 'numberrange' }]} sortOptions={[{ key: 'received_at', label: 'Date' }, { key: 'amount_sar', label: 'Amount' }]} defaultSort={{ key: 'received_at', dir: 'desc' }} csv={{ filename: 'Customer_Receipts', columns: [{ key: 'receipt_number', label: 'Receipt #' }, { key: 'invoice_number', label: 'Invoice #' }, { key: 'client_name', label: 'Client' }, { key: 'payment_method', label: 'Method' }, { key: 'reference_no', label: 'Reference' }, { key: 'amount_sar', label: 'Amount (SAR)' }, { key: 'received_at', label: 'Date' }] }}>
+                {(rows) => (
                 <div className="grid gap-3">
-                  {receipts.map((r) => (
+                  {rows.map((r) => (
                     <div key={r.id} className="bg-white border border-slate-200 rounded-2xl p-4 flex items-center justify-between">
                       <div>
-                        <div className="text-xs font-bold text-emerald-700">{r.receipt_number} • Invoice {r.invoice_number}</div>
+                        <div className="text-xs font-bold text-emerald-700">{r.receipt_number} • Invoice{' '}{invoices.some((x) => x.id === r.invoice_id) ? <button type="button" onClick={() => openObject('invoice', r.invoice_id)} className="underline decoration-dotted underline-offset-2 cursor-pointer">{r.invoice_number}</button> : r.invoice_number}</div>
                         <div className="font-bold text-sm mt-0.5">{r.client_name}</div>
                         <div className="text-xs text-slate-500">{r.payment_method} {r.reference_no ? `• Ref: ${r.reference_no}` : ''}</div>
                       </div>
@@ -1865,12 +2037,14 @@ export default function App() {
                     </div>
                   ))}
                 </div>
+                )}
+                </SmartFilterBar>
               )}
             </div>
           )}
 
           {/* SUB-MODULE: 2.2 ZATCA WAVE & VAT */}
-          {activeSubModule === 'fin_zatca_advisor' && (
+          {view === 'fin_zatca_advisor' && (
             <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
               <h2 className="text-base font-bold text-slate-900">ZATCA Fatoora Wave Readiness &amp; VAT Output Summary</h2>
               <div className="grid sm:grid-cols-3 gap-4 text-xs">
@@ -1893,14 +2067,14 @@ export default function App() {
           )}
 
           {/* SUB-MODULES: 3.2 / 3.3 / 3.4 PURCHASE CYCLE */}
-          {['pur_orders', 'pur_grn', 'pur_bills'].includes(activeSubModule) && (
+          {['pur_orders', 'pur_grn', 'pur_bills'].includes(view) && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-base sm:text-lg font-bold text-slate-900">
-                    {activeSubModule === 'pur_orders' && 'Purchase Orders (PO)'}
-                    {activeSubModule === 'pur_grn' && 'Goods Receipt Notes (GRN)'}
-                    {activeSubModule === 'pur_bills' && 'Supplier Bills & Landed Cost'}
+                    {view === 'pur_orders' && 'Purchase Orders (PO)'}
+                    {view === 'pur_grn' && 'Goods Receipt Notes (GRN)'}
+                    {view === 'pur_bills' && 'Supplier Bills & Landed Cost'}
                   </h2>
                   <p className="text-xs text-slate-500">PO Issuance → Goods Receipt Note (GRN) → Supplier Bill &amp; Customs/Freight Allocation.</p>
                 </div>
@@ -1917,14 +2091,16 @@ export default function App() {
                   No Purchase Orders created yet. Click <strong>New Purchase Order</strong> to issue a supplier PO.
                 </div>
               ) : (
+                <SmartFilterBar lang={lang} key={activeSubModule} rows={view === 'pur_grn' ? purchaseOrders.filter((x) => x.status === 'grn_completed') : activeSubModule === 'pur_bills' ? purchaseOrders.filter((x) => x.status === 'billed' || x.status === 'paid' || ['posted', 'paid'].includes(x.bill_status)) : purchaseOrders} storageKey={activeSubModule} searchKeys={['po_number', 'supplier_name', 'so_number']} filters={[{ key: 'status', label: lang === 'ar' ? 'المرحلة' : 'Stage', type: 'select' }, { key: 'payment_status', label: lang === 'ar' ? 'السداد' : 'Payment', type: 'select' }, { key: 'currency', label: lang === 'ar' ? 'العملة' : 'Currency', type: 'select' }, { key: 'created_at', label: lang === 'ar' ? 'التاريخ' : 'Date', type: 'daterange' }]} sortOptions={[{ key: 'created_at', label: 'Date' }, { key: 'goods_total_sar', label: 'Amount' }, { key: 'supplier_name', label: 'Supplier' }]} defaultSort={{ key: 'created_at', dir: 'desc' }} csv={{ filename: 'Purchase_Orders', columns: [{ key: 'po_number', label: 'PO #' }, { key: 'supplier_name', label: 'Supplier' }, { key: 'currency', label: 'Currency' }, { key: 'goods_total_fx', label: 'Goods (FX)' }, { key: 'goods_total_sar', label: 'Goods (SAR)' }, { key: 'landed_cost_sar', label: 'Landed (SAR)' }, { key: 'supplier_vat_sar', label: 'VAT (SAR)' }, { key: 'status', label: 'Stage' }, { key: 'payment_status', label: 'Payment' }, { key: 'created_at', label: 'Date' }] }}>
+                {(rows) => (
                 <div className="grid gap-3">
-                  {purchaseOrders.map((po) => {
+                  {rows.map((po) => {
                     const totalLandedSar = Number(po.goods_total_sar || 0) + Number(po.landed_cost_sar || 0);
                     return (
                       <div key={po.id} className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div>
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded">{po.po_number} <div className="mt-1"><button type="button" onClick={(e) => { e.stopPropagation(); setPreviewPO(po); }} className="no-print px-2 py-1 text-[11px] rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-semibold inline-flex items-center gap-1 cursor-pointer transition"><span>Preview A4 PO</span></button> <SharePurchaseOrderButtons company={company} suppliers={vendors} po={po} compact /></div></span>
+                            <span className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded"><button type="button" onClick={(e) => { e.stopPropagation(); openObject('po', po.id); }} className="underline decoration-dotted underline-offset-2 hover:text-blue-900 cursor-pointer">{po.po_number}</button> <div className="mt-1"><button type="button" onClick={(e) => { e.stopPropagation(); setPreviewPO(po); }} className="no-print px-2 py-1 text-[11px] rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-semibold inline-flex items-center gap-1 cursor-pointer transition"><span>Preview A4 PO</span></button> <SharePurchaseOrderButtons company={company} suppliers={vendors} po={po} compact /></div></span>
                             {po.so_number && <span className="text-xs bg-slate-100 px-2 py-0.5 rounded">Linked: {po.so_number}</span>}
                             <span className="text-xs font-bold uppercase text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
                               {po.status.replace('_', ' ')}
@@ -1971,12 +2147,14 @@ export default function App() {
                     );
                   })}
                 </div>
+                )}
+                </SmartFilterBar>
               )}
             </div>
           )}
 
           {/* SUB-MODULE: 5.1 SALES PROFIT SHARE LEDGER */}
-          {activeSubModule === 'comm_ledger' && (
+          {view === 'comm_ledger' && (
             <div className="space-y-4">
               <div>
                 <h2 className="text-base sm:text-lg font-bold text-slate-900">Sales Profit Share Ledger (Collection-Based)</h2>
@@ -2025,7 +2203,7 @@ export default function App() {
           )}
 
           {/* SUB-MODULE: 6.1 TEAM & SALESMEN MASTER (CREATE NEW SALESMEN & STAFF) */}
-          {activeSubModule === 'set_salesmen' && (
+          {view === 'set_salesmen' && (
             <div className="space-y-4 max-w-3xl">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -2219,10 +2397,10 @@ export default function App() {
             </div>
           )}
 
-          {activeSubModule === 'set_num_ranges' && (['Admin', 'CEO', 'Finance'].includes(profile?.role || 'Admin') ? <NumberRangesView supabase={supabase} ranges={numberRanges} onRefresh={refreshAllErpData} /> : <div className='bg-amber-50 border border-amber-200 rounded-2xl p-6 text-xs text-amber-900 font-semibold'>Access Restricted: Only Admin / CEO or Finance roles can modify Document Number Ranges.</div>)}
+          {view === 'set_num_ranges' && (['Admin', 'CEO', 'Finance'].includes(profile?.role || 'Admin') ? <NumberRangesView supabase={supabase} ranges={numberRanges} onRefresh={refreshAllErpData} /> : <div className='bg-amber-50 border border-amber-200 rounded-2xl p-6 text-xs text-amber-900 font-semibold'>Access Restricted: Only Admin / CEO or Finance roles can modify Document Number Ranges.</div>)}
 
           {/* SUB-MODULE: 6.2 COMPANY SETTINGS */}
-          {activeSubModule === 'set_company' && (
+          {view === 'set_company' && (
             <form onSubmit={handleSaveCompanySettings} className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 max-w-2xl">
               <div className="border-b border-slate-100 pb-3">
                 <h2 className="text-base font-bold text-slate-900">Company &amp; ZATCA Tax Profile (Editable)</h2>
@@ -2280,6 +2458,7 @@ export default function App() {
             </form>
           )}
         </main>
+      </div>
       </div>
 
       {/* GLOBAL SMART SEARCH & DISCOVERY MODAL */}
