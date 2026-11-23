@@ -287,3 +287,10 @@ Do not add or rename accounts without saying so in your summary — the accounta
 ## Known gaps
 See the "KSA-APP (Horizon ERP) — Gap Analysis" doc (IDs S1–S9, A1–A12, Z1–Z12, F1–F18, T1–T13) and its
 "Claude Code prompts" tab for the planned fix order.
+
+## Migration rule: views over row types
+The role-redacted `*_v` views use `jsonb_populate_record(null::public.<table>, ...)`, so they hold the table's row type.
+PostgreSQL 16.16 / 17.x and later refuse `ALTER TABLE ... ADD/ALTER/DROP COLUMN` on such a table while the view exists.
+In any migration that alters one of these tables: `drop view if exists public.<table>_v;` before the first ALTER,
+re-create the view after, then re-grant (`revoke all ... from anon, public; grant select ... to authenticated`).
+`supabase/tests/migration_rules.test.ts` enforces this. Edit the .sql files directly.

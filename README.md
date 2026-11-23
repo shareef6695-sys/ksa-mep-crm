@@ -67,6 +67,7 @@ Order:
 0001_baseline  0002_roles_rls  0003_audit_lock  0004_posting
 0006_credit_receipts  0007_commissions  0008_reporting  0009_vat  0010_zatca_phase2  0011_inventory
 0012_procurement  0013_sales_controls  0014_projects_contracts  0015_notifications  0016_billing_completion
+0017_vat_view_invoker
 0005_lock_writes      ← always last: it removes direct table writes once every posting function exists
 ```
 

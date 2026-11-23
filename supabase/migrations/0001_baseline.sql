@@ -829,4 +829,24 @@ notify pgrst, 'reload schema';
 alter table public.purchase_orders add column if not exists bill_number text;
 alter table public.purchase_orders add column if not exists billed_at   timestamptz;
 
+
+-- Older live projects created public.inquiries without created_at (0001 Part A only adds it on a fresh project).
+-- sales_pipeline() below filters on it. Existing rows take their updated_at.
+alter table public.inquiries add column if not exists created_at timestamptz;
+update public.inquiries set created_at = coalesce(updated_at, now()) where created_at is null;
+alter table public.inquiries alter column created_at set default now();
+
+-- Roles: older live projects have team_profiles_role_key_check allowing only
+-- (sales_mep, sales_it, purchase, coordinator, manager). The app uses the roles in
+-- src/app/constants.js ROLE_OPTIONS; keep the two legacy keys so existing rows stay valid.
+do $$
+begin
+  if exists (select 1 from pg_constraint where conrelid = 'public.team_profiles'::regclass
+             and conname = 'team_profiles_role_key_check') then
+    alter table public.team_profiles drop constraint team_profiles_role_key_check;
+  end if;
+  alter table public.team_profiles add constraint team_profiles_role_key_check check (role_key in
+    ('admin','ceo','finance','manager','sales_mep','sales_it','procurement','purchase','coordinator'));
+end $$;
+
 notify pgrst, 'reload schema';

@@ -23,6 +23,11 @@ begin;
 -- ---------------------------------------------------------------------
 -- 1. Columns
 -- ---------------------------------------------------------------------
+
+-- Prompt 15 fix: views built on these tables' row types (jsonb_populate_record(null::table, ...)) must be dropped before
+-- ALTER TABLE on newer Postgres; they are re-created further down in this migration and re-granted at the end.
+drop view if exists public.invoices_v;
+drop view if exists public.credit_notes_v;
 alter table public.invoices     add column if not exists debited_amount_sar numeric(18,2) not null default 0;
 alter table public.credit_notes add column if not exists zatca_status text;
 do $$
@@ -1094,5 +1099,16 @@ begin
 end $$;
 
 notify pgrst, 'reload schema';
+
+
+-- Prompt 15 fix: grants on the re-created views
+do $$
+declare v text;
+begin
+  foreach v in array array['invoices_v', 'credit_notes_v'] loop
+    execute format('revoke all on public.%I from anon, public', v);
+    execute format('grant select on public.%I to authenticated', v);
+  end loop;
+end $$;
 
 commit;

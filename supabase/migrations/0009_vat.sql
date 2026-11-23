@@ -116,6 +116,12 @@ select 'vendor', id, name_en, vat_number from public.vendors
 revoke all on public.invalid_vat_numbers from anon, public;
 grant select on public.invalid_vat_numbers to authenticated;
 
+
+-- Prompt 15 fix: views built on these tables' row types (jsonb_populate_record(null::table, ...)) must be dropped before
+-- ALTER TABLE on newer Postgres; they are re-created further down in this migration and re-granted at the end.
+drop view if exists public.sales_orders_v;
+drop view if exists public.invoices_v;
+drop view if exists public.credit_notes_v;
 alter table public.sales_orders    add column if not exists customer_id      text;
 alter table public.invoices        add column if not exists customer_id      text;
 alter table public.invoices        add column if not exists vat_breakdown    jsonb not null default '[]'::jsonb;
@@ -691,5 +697,16 @@ begin
 end $$;
 
 notify pgrst, 'reload schema';
+
+
+-- Prompt 15 fix: grants on the re-created views
+do $$
+declare v text;
+begin
+  foreach v in array array['sales_orders_v', 'invoices_v', 'credit_notes_v'] loop
+    execute format('revoke all on public.%I from anon, public', v);
+    execute format('grant select on public.%I to authenticated', v);
+  end loop;
+end $$;
 
 commit;

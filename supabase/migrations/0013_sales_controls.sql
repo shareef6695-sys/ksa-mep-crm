@@ -18,6 +18,13 @@
 -- =====================================================================
 begin;
 
+
+-- Older live projects created public.inquiries without created_at (0001 Part A only adds it on a fresh project).
+-- sales_pipeline() below filters on it. Existing rows take their updated_at.
+alter table public.inquiries add column if not exists created_at timestamptz;
+update public.inquiries set created_at = coalesce(updated_at, now()) where created_at is null;
+alter table public.inquiries alter column created_at set default now();
+
 insert into public.app_settings (key, value)
 values ('sales_settings', '{"minMarginPct": 10, "approvalAboveSar": 250000, "overdueBlockDays": 90}')
 on conflict (key) do nothing;
@@ -28,6 +35,11 @@ language sql stable security definer set search_path = public as $$
          || coalesce((select value from public.app_settings where key = 'sales_settings' and jsonb_typeof(value) = 'object'), '{}'::jsonb)
 $$;
 
+
+-- Prompt 15 fix: views built on these tables' row types (jsonb_populate_record(null::table, ...)) must be dropped before
+-- ALTER TABLE on newer Postgres; they are re-created further down in this migration and re-granted at the end.
+drop view if exists public.sales_orders_v;
+drop view if exists public.invoices_v;
 alter table public.invoices add column if not exists payment_terms text;
 alter table public.invoices add column if not exists due_date date;
 alter table public.sales_orders add column if not exists cancelled_reason text;
@@ -638,5 +650,31 @@ begin
 end $$;
 
 notify pgrst, 'reload schema';
+
+
+-- 0013 changes invoices / sales_orders: re-create their views so they show the new columns (Prompt 15 fix)
+create or replace view public.invoices_v with (security_barrier = true) as
+select (jsonb_populate_record(null::public.invoices,
+          case when public.can_view_cost() then to_jsonb(t) else public.redact_costs(to_jsonb(t)) end)).*
+from public.invoices t
+where public.has_role('admin','ceo','finance','manager') or (public.is_sales() and t.salesman_id = public.uid_text());
+
+create or replace view public.sales_orders_v with (security_barrier = true) as
+select (jsonb_populate_record(null::public.sales_orders,
+          case when public.can_view_cost() then to_jsonb(t) else public.redact_costs(to_jsonb(t)) end)).*
+from public.sales_orders t
+where public.has_role('admin','ceo','manager','finance','procurement') or (public.is_sales() and t.salesman_id = public.uid_text());
+
+
+
+-- Prompt 15 fix: grants on the re-created views
+do $$
+declare v text;
+begin
+  foreach v in array array['sales_orders_v', 'invoices_v'] loop
+    execute format('revoke all on public.%I from anon, public', v);
+    execute format('grant select on public.%I to authenticated', v);
+  end loop;
+end $$;
 
 commit;
