@@ -17,7 +17,7 @@ export default function AdminModals() {
               <button type="button" onClick={() => setQuickCreateType(null)}><X className="w-4 h-4" /></button>
             </div>
             <input type="text" required placeholder="Company Name (EN) *" value={quickCust.name_en} onChange={(e) => setQuickCust({ ...quickCust, name_en: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2" />
-            <input type="text" dir="rtl" required placeholder="الاسم القانوني بالعربية *" value={quickCust.name_ar} onChange={(e) => setQuickCust({ ...quickCust, name_ar: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2" />
+            <input type="text" dir="rtl" placeholder="الاسم القانوني بالعربية (اختياري)" value={quickCust.name_ar} onChange={(e) => setQuickCust({ ...quickCust, name_ar: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2" />
             <div className="grid grid-cols-2 gap-2">
               <select value={quickCust.customer_type} onChange={(e) => setQuickCust({ ...quickCust, customer_type: e.target.value })} className="border border-slate-300 rounded-xl px-3 py-2 bg-white">
                 <option value="B2B">B2B (VAT Req)</option>
@@ -83,7 +83,7 @@ export default function AdminModals() {
               </select>
             </div>
             <input type="text" required placeholder="Description (English) *" value={quickItem.name_en} onChange={(e) => setQuickItem({ ...quickItem, name_en: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2" />
-            <input type="text" dir="rtl" required placeholder="الوصف بالعربية *" value={quickItem.name_ar} onChange={(e) => setQuickItem({ ...quickItem, name_ar: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2" />
+            <input type="text" dir="rtl" placeholder="الوصف بالعربية (اختياري)" value={quickItem.name_ar} onChange={(e) => setQuickItem({ ...quickItem, name_ar: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2" />
             <div className="grid grid-cols-2 gap-2">
               <input type="number" step="0.01" required placeholder="Sales Price (SAR) *" value={quickItem.sales_price_sar} onChange={(e) => setQuickItem({ ...quickItem, sales_price_sar: e.target.value })} className="border border-slate-300 rounded-xl px-3 py-2" />
               <div className="flex gap-1">

@@ -34,7 +34,7 @@ export function useSalesActions(s) {
     setNewInq({
       ...newInq,
       itemId: it.id,
-      firstItemDesc: `${it.name_en} (${it.name_ar})`,
+      firstItemDesc: it.name_ar ? `${it.name_en} (${it.name_ar})` : it.name_en,
       firstItemUom: it.uom,
       firstItemCost: Number(it.purchase_price || 0),
       firstItemCurrency: it.purchase_currency || 'SAR',

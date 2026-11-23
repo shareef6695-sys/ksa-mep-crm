@@ -71,7 +71,7 @@ export default function SalesModals() {
                             ? {
                                 ...b,
                                 itemId: chosen.id,
-                                desc: `${chosen.name_en} (${chosen.name_ar})`,
+                                desc: chosen.name_ar ? `${chosen.name_en} (${chosen.name_ar})` : chosen.name_en,
                                 unit: chosen.uom,
                                 buyCurrency: chosen.purchase_currency,
                                 buyUnitCost: Number(chosen.purchase_price || 0),

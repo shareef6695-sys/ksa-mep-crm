@@ -81,6 +81,9 @@ describe('checks and preview', () => {
     const w = checkCustomer({ ...complete, vat_number: '', district: '', postal_code: '' }).warnings;
     expect(w).toEqual(['No VAT number', 'Address incomplete: district, postal code']);
   });
+  it('the Arabic name is optional', () => {
+    expect(checkCustomer({ ...complete, name_ar: '' })).toEqual({ errors: [], warnings: [], duplicate: false });
+  });
   it('existing customers (same VAT or same name) are marked as duplicates', () => {
     expect(checkCustomer(complete, { existing: [{ customer_code: 'CUST-00001', name_en: 'FULL CO.', vat_number: '' }] }).duplicate).toBe(true);
   });
@@ -93,8 +96,8 @@ describe('checks and preview', () => {
     ]);
     const p = buildImportPreview(text);
     expect(p.format).toBe('template');
-    expect(p.rows.map((r) => r.status)).toEqual(['warning', 'error', 'duplicate', 'ready']);
-    expect(p.summary).toMatchObject({ total: 4, ready: 1, warning: 1, error: 1, duplicate: 1 });
+    expect(p.rows.map((r) => r.status)).toEqual(['ready', 'error', 'duplicate', 'ready']);
+    expect(p.summary).toMatchObject({ total: 4, ready: 2, warning: 0, error: 1, duplicate: 1 });
     expect(p.importable.map((c) => [c.row, c.name_en])).toEqual([[2, 'Alpha Co'], [5, 'Gamma']]);
   });
 });

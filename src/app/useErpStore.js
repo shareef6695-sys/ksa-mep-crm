@@ -485,7 +485,7 @@ function useErpCore() {
         id: c.id,
         badge: c.customer_code,
         label: c.name_en,
-        sublabel: `${c.name_ar || ''} • ${c.customer_type} • VAT: ${c.vat_number || 'N/A'} • ${c.phone}`,
+        sublabel: [c.name_ar, c.customer_type, `VAT: ${c.vat_number || 'N/A'}`, c.phone].filter(Boolean).join(' • '),
         rightMeta: c.city,
       })),
     [customers]
@@ -509,7 +509,7 @@ function useErpCore() {
         id: it.id,
         badge: it.item_code,
         label: `${it.name_en} (${it.uom})`,
-        sublabel: `${it.name_ar || ''} • ${it.item_type} • ZATCA VAT: ${it.zatca_vat_type}`,
+        sublabel: [it.name_ar, it.item_type, `ZATCA VAT: ${it.zatca_vat_type}`].filter(Boolean).join(' • '),
         rightMeta: `SAR ${formatSAR(it.sales_price_sar)}`,
       })),
     [items]
