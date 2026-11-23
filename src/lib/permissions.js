@@ -62,6 +62,7 @@ export const MODULE_ACCESS = {
 export const ACTION_ACCESS = {
   'cost.view': ['admin', 'ceo', 'finance', 'manager', 'procurement'],
   'customer.create': ['admin', 'ceo', 'manager', 'finance', ...SALES],
+  'customer.import': ['admin', 'ceo', 'manager', 'finance'], // bulk CSV import (import_customers, 0018)
   'quote.create': ['admin', 'ceo', 'manager', ...SALES],
   'quote.price': ['admin', 'ceo', 'manager'], // set cost / margin, approve, convert to SO
   'quote.approve': ['admin', 'ceo', 'manager'], // margin floor / value threshold (0013); not your own quote

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Plus, Users, Truck, Package, CheckCircle2, X, Building2 } from 'lucide-react';
+import { Plus, Users, Truck, Package, CheckCircle2, X, Building2, FileUp } from 'lucide-react';
+import { CustomerImportModal } from '../features/sales/CustomerImportModal';
 import { formatSAR, isValidKsaVat, VAT_EXEMPTION_REASONS } from './erpEngine';
 
 export const STANDARD_UOMS = [
@@ -31,8 +32,9 @@ export const ZATCA_VAT_TYPES = [
 // ============================================================================
 // 1. CUSTOMERS MASTER VIEW (UNDER SALES & FULFILLMENT)
 // ============================================================================
-export function CustomersMasterView({ supabase, customers, salesmenList, onRefresh, readOnly = false }) {
+export function CustomersMasterView({ supabase, customers, salesmenList, onRefresh, readOnly = false, canImport = false }) {
   const [showForm, setShowForm] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [form, setForm] = useState({
     name_en: '',
     name_ar: '',
@@ -91,14 +93,27 @@ export function CustomersMasterView({ supabase, customers, salesmenList, onRefre
           <h2 className="text-base sm:text-lg font-bold text-slate-900">Customers Master (ZATCA Buyer Registry)</h2>
           <p className="text-xs text-slate-500">Full B2B &amp; B2C customer directory with 15-digit VAT numbers, Arabic legal names, and credit limits.</p>
         </div>
-        <button
-          hidden={readOnly}
-          onClick={() => setShowForm(!showForm)}
-          className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
-        >
-          <Plus className="w-4 h-4" /> {showForm ? 'Close Form' : 'New Customer'}
-        </button>
+        <div className="flex gap-2">
+          {canImport && (
+            <button
+              onClick={() => setShowImport(true)}
+              className="px-3.5 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+            >
+              <FileUp className="w-4 h-4" /> Import CSV
+            </button>
+          )}
+          <button
+            hidden={readOnly}
+            onClick={() => setShowForm(!showForm)}
+            className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+          >
+            <Plus className="w-4 h-4" /> {showForm ? 'Close Form' : 'New Customer'}
+          </button>
+        </div>
       </div>
+      {showImport && (
+        <CustomerImportModal supabase={supabase} customers={customers} onClose={() => setShowImport(false)} onImported={onRefresh} />
+      )}
 
       {showForm && !readOnly && (
         <form onSubmit={handleSaveCustomer} className="bg-white border border-blue-200 rounded-2xl p-5 shadow-sm space-y-4 text-xs">
@@ -217,7 +232,7 @@ export function CustomersMasterView({ supabase, customers, salesmenList, onRefre
 
       {customers.length === 0 ? (
         <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-slate-500">
-          No customers registered yet. Click <strong>New Customer</strong> to create your first B2B or B2C customer record.
+          No customers registered yet. Click <strong>New Customer</strong> to create your first B2B or B2C customer record{canImport ? <>, or <strong>Import CSV</strong> to load a list</> : null}.
         </div>
       ) : (
         <div className="grid gap-3">
@@ -229,8 +244,8 @@ export function CustomersMasterView({ supabase, customers, salesmenList, onRefre
                   <span className="text-xs font-semibold bg-slate-100 px-2 py-0.5 rounded">{c.customer_type}</span>
                   {c.vat_number && <span className="text-xs font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">VAT: {c.vat_number}</span>}
                 </div>
-                <h3 className="text-base font-bold mt-1">{c.name_en} <span className="text-sm font-normal text-slate-500">({c.name_ar})</span></h3>
-                <p className="text-xs text-slate-500">{c.contact_person} • {c.phone} • {c.city} • Terms: {c.payment_terms}</p>
+                <h3 className="text-base font-bold mt-1">{c.name_en} {c.name_ar && <span className="text-sm font-normal text-slate-500" dir="rtl">({c.name_ar})</span>}</h3>
+                <p className="text-xs text-slate-500">{[c.contact_person, c.phone || c.email, c.city, c.payment_terms && `Terms: ${c.payment_terms}`].filter(Boolean).join(' • ')}</p>
               </div>
               <div className="text-right text-xs">
                 <div className="text-slate-400">Credit Limit</div>
