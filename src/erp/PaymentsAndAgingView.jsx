@@ -1,21 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import { Banknote, Plus, Clock, AlertCircle, CheckCircle2, X, ArrowRightLeft } from 'lucide-react';
-import { formatSAR } from './erpEngine';
+import { formatSAR, invoiceOpenSar } from './erpEngine';
+import { getBucket, daysOld, daysPastDue } from '../lib/aging';
 import { downloadCsvFile } from './csvExport';
-import { postAutoJournal } from './glEngine';
+import { tr } from '../ui/financeI18n';
 
-function getDaysOld(dateStr) {
-  if (!dateStr) return 0;
-  const diff = Date.now() - new Date(dateStr).getTime();
-  return Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
-}
+const getDaysOld = (dateStr) => daysOld(dateStr);
 
-function getBucket(days) {
-  if (days <= 30) return '0-30';
-  if (days <= 60) return '31-60';
-  if (days <= 90) return '61-90';
-  return '90+';
-}
 
 export function SupplierPaymentsView({
   supabase,
@@ -23,6 +14,8 @@ export function SupplierPaymentsView({
   supplierPayments,
   profile,
   onRefresh,
+  readOnly = false,
+  glAccounts = [],
 }) {
   const [showModal, setShowModal] = useState(false);
   const [selectedPoId, setSelectedPoId] = useState('');
@@ -33,7 +26,13 @@ export function SupplierPaymentsView({
     bank_reference: '',
     payment_date: new Date().toISOString().slice(0, 10),
     notes: '',
+    bank_account_code: '1020',
   });
+  // Cash / bank accounts Finance may pay from (10xx assets in the Chart of Accounts)
+  const payFromAccounts = useMemo(() => {
+    const list = (glAccounts || []).filter((a) => String(a.account_code).startsWith('10') && a.account_type === 'Asset' && a.is_active !== false);
+    return list.length ? list : [{ account_code: '1020', account_name_en: 'Bank - Main Current Account (SAR)' }];
+  }, [glAccounts]);
   const [saving, setSaving] = useState(false);
 
   const openPOs = useMemo(
@@ -67,54 +66,26 @@ export function SupplierPaymentsView({
     try {
       const amtFx = parseFloat(form.amount_fx) || 0;
       const settleRate = parseFloat(form.settlement_fx_rate) || Number(selectedPO.fx_rate) || 1;
-      const bookedRate = Number(selectedPO.fx_rate) || 1;
       if (amtFx <= 0) {
         setSaving(false);
         return;
       }
 
-      const amtSar = Number((amtFx * settleRate).toFixed(2));
-      const bookedSar = Number((amtFx * bookedRate).toFixed(2));
-      const fxVarianceSar = Number((amtSar - bookedSar).toFixed(2));
-
-      const { data: payNum } = await supabase.rpc('next_doc_number', { p_doc_type: 'SUPPLIER_PAY' });
-      const glLines = [{ account_code: '2010', account_name: '2010 - Accounts Payable (Trade Suppliers)', debit: bookedSar, credit: 0, memo: selectedPO.po_number + ' (' + selectedPO.supplier_name + ')' }, { account_code: '1020', account_name: '1020 - Al Rajhi / SNB Main Bank Account (SAR)', debit: 0, credit: amtSar, memo: form.payment_method + ' ' + (form.bank_reference || '') }];
-      if (fxVarianceSar > 0) glLines.push({ account_code: '5130', account_name: '5130 - Bank Charges & Realized FX Gain/Loss', debit: fxVarianceSar, credit: 0, memo: 'Realized FX Loss on ' + selectedPO.currency });
-      if (fxVarianceSar < 0) glLines.push({ account_code: '5130', account_name: '5130 - Bank Charges & Realized FX Gain/Loss', debit: 0, credit: Math.abs(fxVarianceSar), memo: 'Realized FX Gain on ' + selectedPO.currency });
-      await postAutoJournal({ supabase, entryDate: form.payment_date, sourceModule: 'SUPPLIER_PAY', sourceDocNumber: payNum, description: 'Supplier Payment ' + payNum + ' - ' + selectedPO.supplier_name + ' (' + selectedPO.po_number + ')', postedBy: profile?.full_name || 'Finance', lines: glLines });
-
-      await supabase.from('supplier_payments').insert({
-        id: `spay-${Date.now()}`,
-        voucher_number: payNum,
-        po_id: selectedPO.id,
-        po_number: selectedPO.po_number,
-        supplier_name: selectedPO.supplier_name,
-        currency: selectedPO.currency || 'SAR',
-        amount_fx: amtFx,
-        booked_fx_rate: bookedRate,
-        settlement_fx_rate: settleRate,
-        amount_sar: amtSar,
-        fx_variance_sar: fxVarianceSar,
-        payment_method: form.payment_method,
-        bank_reference: form.bank_reference,
-        payment_date: form.payment_date,
-        notes: form.notes,
-        recorded_by: profile?.full_name || 'Finance',
+      // One transaction in the database: payment + journal + PO balance (0004_posting.sql)
+      const { error } = await supabase.rpc('post_supplier_payment', {
+        p_po_id: selectedPO.id,
+        p_amount_fx: amtFx,
+        p_settlement_rate: settleRate,
+        p_method: form.payment_method,
+        p_reference: form.bank_reference,
+        p_date: form.payment_date,
+        p_bank_account: form.bank_account_code,
+        p_notes: form.notes,
       });
-
-      const nextPaidFx = Number((Number(selectedPO.paid_amount_fx || 0) + amtFx).toFixed(2));
-      const nextPaidSar = Number((Number(selectedPO.paid_amount_sar || 0) + amtSar).toFixed(2));
-      const isFullyPaid = nextPaidFx >= Number(selectedPO.total_amount_fx || 0) - 0.01;
-
-      await supabase
-        .from('purchase_orders')
-        .update({
-          paid_amount_fx: nextPaidFx,
-          paid_amount_sar: nextPaidSar,
-          payment_status: isFullyPaid ? 'paid' : 'partial',
-          status: isFullyPaid ? 'paid' : selectedPO.status,
-        })
-        .eq('id', selectedPO.id);
+      if (error) {
+        window.alert(`Supplier payment could not be posted: ${error.message}`);
+        return;
+      }
 
       setShowModal(false);
       setSelectedPoId('');
@@ -138,30 +109,31 @@ export function SupplierPaymentsView({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-base sm:text-lg font-bold text-slate-900">Supplier Payment Vouchers (Accounts Payable)</h2>
+          <h2 className="text-base sm:text-lg font-bold text-slate-900">{tr("Supplier Payment Vouchers (Accounts Payable)")}</h2>
           <p className="text-xs text-slate-500">
-            Post partial or full multi-currency supplier settlements (TT / LC / Bank Transfer) with automatic SAR FX variance tracking.
+            {tr("Post partial or full multi-currency supplier settlements (TT / LC / Bank Transfer) with automatic SAR FX variance tracking.")}
           </p>
         </div>
         <button
+          hidden={readOnly}
           onClick={() => setShowModal(true)}
           className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
         >
-          <Plus className="w-4 h-4" /> Record Supplier Payment
+          <Plus className="w-4 h-4" /> {tr("Record Supplier Payment")}
         </button>
       </div>
 
       <div className="grid sm:grid-cols-3 gap-3 text-xs">
         <div className="bg-white border border-slate-200 rounded-2xl p-4">
-          <div className="text-slate-500">Total Supplier Disbursements</div>
-          <div className="text-xl font-bold text-slate-900 mt-1">SAR {formatSAR(totalDisbursedSar)}</div>
+          <div className="text-slate-500">{tr("Total Supplier Disbursements")}</div>
+          <div className="text-xl font-bold text-slate-900 mt-1">{tr("SAR")}{" "}{formatSAR(totalDisbursedSar)}</div>
         </div>
         <div className="bg-white border border-slate-200 rounded-2xl p-4">
-          <div className="text-slate-500">Open Unpaid / Partial POs</div>
-          <div className="text-xl font-bold text-amber-700 mt-1">{openPOs.length} Orders</div>
+          <div className="text-slate-500">{tr("Open Unpaid / Partial POs")}</div>
+          <div className="text-xl font-bold text-amber-700 mt-1">{openPOs.length}{" "}{tr("Orders")}</div>
         </div>
         <div className="bg-white border border-slate-200 rounded-2xl p-4">
-          <div className="text-slate-500">Realized FX Variance (SAR)</div>
+          <div className="text-slate-500">{tr("Realized FX Variance (SAR)")}</div>
           <div className={`text-xl font-bold mt-1 ${totalFxVarianceSar > 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
             {totalFxVarianceSar > 0 ? `+SAR ${formatSAR(totalFxVarianceSar)} (Loss)` : `SAR ${formatSAR(Math.abs(totalFxVarianceSar))} (Gain)`}
           </div>
@@ -170,21 +142,21 @@ export function SupplierPaymentsView({
 
       {supplierPayments.length === 0 ? (
         <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-slate-500">
-          No Supplier Payment Vouchers recorded yet. Click <strong>Record Supplier Payment</strong> to settle a Purchase Order.
+          {tr("No Supplier Payment Vouchers recorded yet. Click")} <strong>{tr("Record Supplier Payment")}</strong> {tr("to settle a Purchase Order.")}
         </div>
       ) : (
         <div className="bg-white border border-slate-200 rounded-2xl overflow-x-auto shadow-sm">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-start text-xs">
             <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
               <tr>
-                <th className="p-3">Voucher #</th>
-                <th className="p-3">Date</th>
-                <th className="p-3">Supplier &amp; PO Ref</th>
-                <th className="p-3">Method / Bank Ref</th>
-                <th className="p-3 text-right">Paid (FCY)</th>
-                <th className="p-3 text-right">Settle Rate</th>
-                <th className="p-3 text-right">Paid (SAR)</th>
-                <th className="p-3 text-right">FX Diff (SAR)</th>
+                <th className="p-3">{tr("Voucher #")}</th>
+                <th className="p-3">{tr("Date")}</th>
+                <th className="p-3">{tr("Supplier & PO Ref")}</th>
+                <th className="p-3">{tr("Method / Bank Ref")}</th>
+                <th className="p-3 text-end">{tr("Paid (FCY)")}</th>
+                <th className="p-3 text-end">{tr("Settle Rate")}</th>
+                <th className="p-3 text-end">{tr("Paid (SAR)")}</th>
+                <th className="p-3 text-end">{tr("FX Diff (SAR)")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -202,12 +174,12 @@ export function SupplierPaymentsView({
                       <div>{p.payment_method}</div>
                       <div className="text-[11px] text-slate-400">{p.bank_reference || '—'}</div>
                     </td>
-                    <td className="p-3 text-right font-mono font-bold">
+                    <td className="p-3 text-end font-mono font-bold">
                       {p.currency} {formatSAR(p.amount_fx)}
                     </td>
-                    <td className="p-3 text-right font-mono">{Number(p.settlement_fx_rate).toFixed(4)}</td>
-                    <td className="p-3 text-right font-bold text-slate-900">SAR {formatSAR(p.amount_sar)}</td>
-                    <td className={`p-3 text-right font-semibold ${fxDiff > 0 ? 'text-rose-600' : fxDiff < 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                    <td className="p-3 text-end font-mono">{Number(p.settlement_fx_rate).toFixed(4)}</td>
+                    <td className="p-3 text-end font-bold text-slate-900">{tr("SAR")}{" "}{formatSAR(p.amount_sar)}</td>
+                    <td className={`p-3 text-end font-semibold ${fxDiff > 0 ? 'text-rose-600' : fxDiff < 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
                       {fxDiff === 0 ? '0.00' : `${fxDiff > 0 ? '+' : ''}${formatSAR(fxDiff)}`}
                     </td>
                   </tr>
@@ -219,26 +191,26 @@ export function SupplierPaymentsView({
       )}
 
       {/* MODAL: RECORD SUPPLIER PAYMENT VOUCHER */}
-      {showModal && (
+      {showModal && !readOnly && (
         <div className="fixed inset-0 bg-slate-950/70 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4">
             <div className="flex items-center justify-between border-b pb-3">
               <h3 className="font-bold text-base flex items-center gap-2">
-                <Banknote className="w-4 h-4 text-blue-600" /> Record Supplier Payment Voucher
+                <Banknote className="w-4 h-4 text-blue-600" /> {tr("Record Supplier Payment Voucher")}
               </h3>
               <button onClick={() => setShowModal(false)}><X className="w-5 h-5" /></button>
             </div>
 
             <form onSubmit={handleCreatePayment} className="space-y-3 text-xs">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Select Open Purchase Order *</label>
+                <label className="block font-semibold text-slate-700 mb-1">{tr("Select Open Purchase Order *")}</label>
                 <select
                   required
                   value={selectedPoId}
                   onChange={(e) => handleSelectPO(e.target.value)}
                   className="w-full border border-slate-300 rounded-xl px-3 py-2.5 bg-white font-semibold"
                 >
-                  <option value="">Choose Unpaid / Partial PO...</option>
+                  <option value="">{tr("Choose Unpaid / Partial PO...")}</option>
                   {openPOs.map((po) => {
                     const remFx = Math.max(0, Number(po.total_amount_fx || 0) - Number(po.paid_amount_fx || 0));
                     return (
@@ -257,8 +229,8 @@ export function SupplierPaymentsView({
                     <span className="font-bold">{selectedPO.currency} {formatSAR(selectedPO.total_amount_fx)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Booked PO FX Rate:</span>
-                    <span className="font-mono font-bold">{selectedPO.fx_rate} SAR</span>
+                    <span className="text-slate-500">{tr("Booked PO FX Rate:")}</span>
+                    <span className="font-mono font-bold">{selectedPO.fx_rate}{" "}{tr("SAR")}</span>
                   </div>
                 </div>
               )}
@@ -279,7 +251,7 @@ export function SupplierPaymentsView({
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Bank Settlement FX Rate *</label>
+                  <label className="block font-semibold text-slate-700 mb-1">{tr("Bank Settlement FX Rate *")}</label>
                   <input
                     type="number"
                     step="0.0001"
@@ -294,20 +266,35 @@ export function SupplierPaymentsView({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Payment Method *</label>
+                  <label className="block font-semibold text-slate-700 mb-1">{tr("Payment Method *")}</label>
                   <select
                     value={form.payment_method}
                     onChange={(e) => setForm({ ...form, payment_method: e.target.value })}
                     className="w-full border border-slate-300 rounded-xl px-3 py-2.5 bg-white"
                   >
-                    <option value="Bank TT / Wire Transfer">Bank TT / Wire Transfer</option>
-                    <option value="Letter of Credit (LC)">Letter of Credit (LC)</option>
-                    <option value="SAR Local Bank Transfer">SAR Local Bank Transfer</option>
-                    <option value="Corporate Card / Cheque">Corporate Card / Cheque</option>
+                    <option value="Bank TT / Wire Transfer">{tr("Bank TT / Wire Transfer")}</option>
+                    <option value="Letter of Credit (LC)">{tr("Letter of Credit (LC)")}</option>
+                    <option value="SAR Local Bank Transfer">{tr("SAR Local Bank Transfer")}</option>
+                    <option value="Corporate Card / Cheque">{tr("Corporate Card / Cheque")}</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Payment Date *</label>
+                  <label className="block font-semibold text-slate-700 mb-1">{tr("Pay From Account *")}</label>
+                  <select
+                    value={form.bank_account_code}
+                    onChange={(e) => setForm({ ...form, bank_account_code: e.target.value })}
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2.5 bg-white"
+                  >
+                    {payFromAccounts.map((a) => (
+                      <option key={a.account_code} value={a.account_code}>{a.account_code} - {a.account_name_en}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">{tr("Payment Date *")}</label>
                   <input
                     type="date"
                     required
@@ -320,14 +307,14 @@ export function SupplierPaymentsView({
 
               <input
                 type="text"
-                placeholder="SWIFT / Bank Reference No."
+                placeholder={tr("SWIFT / Bank Reference No.")}
                 value={form.bank_reference}
                 onChange={(e) => setForm({ ...form, bank_reference: e.target.value })}
                 className="w-full border border-slate-300 rounded-xl px-3 py-2.5"
               />
               <input
                 type="text"
-                placeholder="Remarks / Remittance Note"
+                placeholder={tr("Remarks / Remittance Note")}
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
                 className="w-full border border-slate-300 rounded-xl px-3 py-2.5"
@@ -338,7 +325,7 @@ export function SupplierPaymentsView({
                 disabled={saving || !selectedPO}
                 className="w-full py-3 rounded-xl bg-blue-600 text-white font-semibold cursor-pointer"
               >
-                {saving ? 'Posting Payment Voucher...' : 'Post Supplier Payment Voucher'}
+                {saving ? tr('Posting Payment Voucher...') : tr('Post Supplier Payment Voucher')}
               </button>
             </form>
           </div>
@@ -348,48 +335,67 @@ export function SupplierPaymentsView({
   );
 }
 
-export function AgingReportView({ invoices, purchaseOrders }) {
+export function AgingReportView({ invoices, purchaseOrders, supplierBills = null }) {
   const [ledgerSide, setLedgerSide] = useState('ar'); // ar | ap
 
   const arRows = useMemo(() => {
     return invoices
       .map((inv) => {
-        const balance = Math.max(0, Number(inv.grand_total_sar || 0) - Number(inv.paid_amount_sar || 0));
-        const days = getDaysOld(inv.issued_at || inv.created_at);
+        const balance = Math.max(0, invoiceOpenSar(inv));
+        // 0013: aged by days past the due date (payment terms); invoices without one fall back to issue date + 30
+        const days = daysPastDue(inv);
         return {
           docNum: inv.invoice_number,
           party: inv.client_name,
           date: inv.issued_at || inv.created_at,
           days,
-          bucket: getBucket(days),
-          totalSar: Number(inv.grand_total_sar || 0),
-          paidSar: Number(inv.paid_amount_sar || 0),
+          dueLabel: days <= 0 ? `due in ${-days}` : `${days} overdue`,
+          bucket: getBucket(Math.max(0, days)),
+          totalSar: Number(inv.grand_total_sar || 0) + Number(inv.debited_amount_sar || 0), // incl. debit notes (0010)
+          paidSar: Number(inv.paid_amount_sar || 0) + Number(inv.credited_amount_sar || 0), // settled = collected + credited
           balanceSar: balance,
         };
       })
       .filter((r) => r.balanceSar > 0.01);
   }, [invoices]);
 
+  // AP (0012): per supplier bill, aged by days past its due date. Payments on a PO are applied to its bills oldest
+  // first (as ap_aging() does in SQL); POs billed before 0012 have one bill each.
   const apRows = useMemo(() => {
-    return purchaseOrders
-      .map((po) => {
-        const totalSar = Number(po.total_landed_sar || 0);
-        const paidSar = Number(po.paid_amount_sar || 0);
-        const balance = Math.max(0, totalSar - paidSar);
-        const days = getDaysOld(po.created_at);
+    if (!supplierBills) {
+      return purchaseOrders
+        .map((po) => {
+          const totalSar = Number(po.total_landed_sar || 0);
+          const paidSar = Number(po.paid_amount_sar || 0);
+          const days = getDaysOld(po.created_at);
+          return { docNum: po.po_number, party: po.supplier_name, date: po.created_at, days, bucket: getBucket(days), totalSar, paidSar, balanceSar: Math.max(0, totalSar - paidSar) };
+        })
+        .filter((r) => r.balanceSar > 0.01 && r.totalSar > 0);
+    }
+    const poById = Object.fromEntries(purchaseOrders.map((p) => [p.id, p]));
+    const paidLeft = Object.fromEntries(purchaseOrders.map((p) => [p.id, Number(p.paid_amount_fx || 0) * (Number(p.fx_rate) || 1)]));
+    return [...supplierBills]
+      .sort((x, y) => String(x.bill_date).localeCompare(String(y.bill_date)) || String(x.bill_number).localeCompare(String(y.bill_number)))
+      .map((b) => {
+        const totalSar = Number(b.total_sar || 0);
+        const applied = Math.min(totalSar, Math.max(0, paidLeft[b.po_id] || 0));
+        paidLeft[b.po_id] = (paidLeft[b.po_id] || 0) - applied;
+        const due = b.due_date || b.bill_date;
+        const overdue = Math.floor((Date.now() - new Date(`${due}T00:00:00+03:00`).getTime()) / 86400000);
         return {
-          docNum: po.po_number,
-          party: po.supplier_name,
-          date: po.created_at,
-          days,
-          bucket: getBucket(days),
+          docNum: `${b.bill_number}${b.supplier_invoice_no ? ` (${b.supplier_invoice_no})` : ''}`,
+          party: b.supplier_name || poById[b.po_id]?.supplier_name,
+          date: b.bill_date,
+          days: overdue,
+          dueLabel: overdue <= 0 ? `due in ${-overdue}` : `${overdue} overdue`,
+          bucket: getBucket(Math.max(0, overdue)),
           totalSar,
-          paidSar,
-          balanceSar: balance,
+          paidSar: applied,
+          balanceSar: Math.round((totalSar - applied) * 100) / 100,
         };
       })
-      .filter((r) => r.balanceSar > 0.01 && r.totalSar > 0);
-  }, [purchaseOrders]);
+      .filter((r) => r.balanceSar > 0.01);
+  }, [purchaseOrders, supplierBills]);
 
   const activeRows = ledgerSide === 'ar' ? arRows : apRows;
 
@@ -406,9 +412,9 @@ export function AgingReportView({ invoices, purchaseOrders }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-base sm:text-lg font-bold text-slate-900">AR &amp; AP Aging Schedule (Cash Flow Overdue Analysis)</h2>
+          <h2 className="text-base sm:text-lg font-bold text-slate-900">{tr("AR & AP Aging Schedule (Cash Flow Overdue Analysis)")}</h2>
           <p className="text-xs text-slate-500">
-            Track open Customer Receivables and Supplier Payables across 0–30, 31–60, 61–90, and 90+ day aging buckets.
+            {tr("Track open Customer Receivables and Supplier Payables across 0–30, 31–60, 61–90, and 90+ day aging buckets.")}
           </p>
         </div>
 
@@ -428,50 +434,50 @@ export function AgingReportView({ invoices, purchaseOrders }) {
             }`}
           >
             Accounts Payable (AP) ({apRows.length})</button>
-          <button onClick={() => downloadCsvFile(`${ledgerSide.toUpperCase()}_Aging_Report_${new Date().toISOString().slice(0, 10)}.csv`, ['Document #', ledgerSide === 'ar' ? 'Customer' : 'Supplier', 'Age (Days)', 'Aging Bucket', 'Original (SAR)', 'Settled (SAR)', 'Open Balance (SAR)'], activeRows.map((r) => [r.docNum, r.party, r.days, r.bucket + ' Days', r.totalSar.toFixed(2), r.paidSar.toFixed(2), r.balanceSar.toFixed(2)]))} className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold cursor-pointer">Export Excel / CSV</button>
+          <button onClick={() => downloadCsvFile(`${ledgerSide.toUpperCase()}_Aging_Report_${new Date().toISOString().slice(0, 10)}.csv`, ['Document #', ledgerSide === 'ar' ? 'Customer' : 'Supplier', 'Age (Days)', 'Aging Bucket', 'Original (SAR)', 'Settled (SAR)', 'Open Balance (SAR)'], activeRows.map((r) => [r.docNum, r.party, r.days, r.bucket + ' Days', r.totalSar.toFixed(2), r.paidSar.toFixed(2), r.balanceSar.toFixed(2)]))} className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold cursor-pointer">{tr("Export Excel / CSV")}</button>
         </div>
       </div>
 
       {/* 4 Aging Bucket Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
         <div className="bg-white border border-slate-200 rounded-2xl p-4">
-          <div className="text-slate-500">Current (0–30 Days)</div>
-          <div className="text-base sm:text-lg font-bold text-slate-900 mt-1">SAR {formatSAR(bucketTotals['0-30'])}</div>
+          <div className="text-slate-500">{tr("Current (0–30 Days)")}</div>
+          <div className="text-base sm:text-lg font-bold text-slate-900 mt-1">{tr("SAR")}{" "}{formatSAR(bucketTotals['0-30'])}</div>
         </div>
         <div className="bg-white border border-slate-200 rounded-2xl p-4">
-          <div className="text-slate-500">31–60 Days</div>
-          <div className="text-base sm:text-lg font-bold text-blue-700 mt-1">SAR {formatSAR(bucketTotals['31-60'])}</div>
+          <div className="text-slate-500">{tr("31–60 Days")}</div>
+          <div className="text-base sm:text-lg font-bold text-blue-700 mt-1">{tr("SAR")}{" "}{formatSAR(bucketTotals['31-60'])}</div>
         </div>
         <div className="bg-white border border-slate-200 rounded-2xl p-4">
-          <div className="text-slate-500">61–90 Days</div>
-          <div className="text-base sm:text-lg font-bold text-amber-600 mt-1">SAR {formatSAR(bucketTotals['61-90'])}</div>
+          <div className="text-slate-500">{tr("61–90 Days")}</div>
+          <div className="text-base sm:text-lg font-bold text-amber-600 mt-1">{tr("SAR")}{" "}{formatSAR(bucketTotals['61-90'])}</div>
         </div>
         <div className="bg-white border border-slate-200 rounded-2xl p-4">
-          <div className="text-slate-500">Overdue 90+ Days</div>
-          <div className="text-base sm:text-lg font-bold text-rose-600 mt-1">SAR {formatSAR(bucketTotals['90+'])}</div>
+          <div className="text-slate-500">{tr("Overdue 90+ Days")}</div>
+          <div className="text-base sm:text-lg font-bold text-rose-600 mt-1">{tr("SAR")}{" "}{formatSAR(bucketTotals['90+'])}</div>
         </div>
         <div className="bg-slate-900 text-white rounded-2xl p-4 col-span-2 lg:col-span-1">
-          <div className="text-slate-300">Total Open {ledgerSide.toUpperCase()}</div>
-          <div className="text-base sm:text-lg font-bold mt-1">SAR {formatSAR(bucketTotals.total)}</div>
+          <div className="text-slate-300">{tr("Total Open")}{" "}{ledgerSide.toUpperCase()}</div>
+          <div className="text-base sm:text-lg font-bold mt-1">{tr("SAR")}{" "}{formatSAR(bucketTotals.total)}</div>
         </div>
       </div>
 
       <div className="bg-white border border-slate-200 rounded-2xl overflow-x-auto shadow-sm">
         {activeRows.length === 0 ? (
           <div className="p-10 text-center text-sm text-slate-500">
-            Zero open balances in {ledgerSide === 'ar' ? 'Accounts Receivable' : 'Accounts Payable'}.
+            {tr("Zero open balances in")}{" "}{ledgerSide === 'ar' ? tr('Accounts Receivable') : tr('Accounts Payable')}.
           </div>
         ) : (
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-start text-xs">
             <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
               <tr>
-                <th className="p-3">Document #</th>
-                <th className="p-3">{ledgerSide === 'ar' ? 'Customer' : 'Supplier'}</th>
-                <th className="p-3 text-center">Age (Days)</th>
-                <th className="p-3 text-center">Aging Bucket</th>
-                <th className="p-3 text-right">Original (SAR)</th>
-                <th className="p-3 text-right">Settled (SAR)</th>
-                <th className="p-3 text-right">Open Balance (SAR)</th>
+                <th className="p-3">{tr("Document #")}</th>
+                <th className="p-3">{ledgerSide === 'ar' ? tr('Customer') : tr('Supplier')}</th>
+                <th className="p-3 text-center">{tr("Due")}</th>
+                <th className="p-3 text-center">{tr("Aging Bucket")}</th>
+                <th className="p-3 text-end">{tr("Original (SAR)")}</th>
+                <th className="p-3 text-end">{tr("Settled (SAR)")}</th>
+                <th className="p-3 text-end">{tr("Open Balance (SAR)")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -479,7 +485,7 @@ export function AgingReportView({ invoices, purchaseOrders }) {
                 <tr key={i} className="hover:bg-slate-50/70">
                   <td className="p-3 font-mono font-bold text-blue-700">{row.docNum}</td>
                   <td className="p-3 font-bold text-slate-900">{row.party}</td>
-                  <td className="p-3 text-center font-mono">{row.days}d</td>
+                  <td className="p-3 text-center font-mono">{row.dueLabel || `${row.days}d`}</td>
                   <td className="p-3 text-center">
                     <span
                       className={`px-2 py-0.5 rounded font-bold text-[10px] ${
@@ -490,12 +496,12 @@ export function AgingReportView({ invoices, purchaseOrders }) {
                           : 'bg-slate-100 text-slate-700'
                       }`}
                     >
-                      {row.bucket} Days
+                      {row.bucket}{" "}{tr("Days")}
                     </span>
                   </td>
-                  <td className="p-3 text-right">SAR {formatSAR(row.totalSar)}</td>
-                  <td className="p-3 text-right text-emerald-700">SAR {formatSAR(row.paidSar)}</td>
-                  <td className="p-3 text-right font-bold text-slate-900">SAR {formatSAR(row.balanceSar)}</td>
+                  <td className="p-3 text-end">{tr("SAR")}{" "}{formatSAR(row.totalSar)}</td>
+                  <td className="p-3 text-end text-emerald-700">{tr("SAR")}{" "}{formatSAR(row.paidSar)}</td>
+                  <td className="p-3 text-end font-bold text-slate-900">{tr("SAR")}{" "}{formatSAR(row.balanceSar)}</td>
                 </tr>
               ))}
             </tbody>

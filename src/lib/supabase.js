@@ -9,11 +9,6 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   );
 }
 
-// Main client: persists the signed-in session.
+// The only Supabase client in the browser. User accounts are created server-side by the
+// admin-users Edge Function (supabase/functions/admin-users), never with auth.signUp here.
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-// Non-persistent client used by Admins to create Team logins without logging themselves out.
-// TODO(Prompt 2): replace with the admin-create-user Edge Function and remove this client.
-export const supabaseProvisioner = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-});

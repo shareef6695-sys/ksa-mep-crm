@@ -1,6 +1,6 @@
 import React from 'react';
 import { Printer, X, FileText, Truck, Building2 } from 'lucide-react';
-import { formatSAR } from './erpEngine';
+import { formatSAR, vatRateOf } from './erpEngine';
 import { ShareDocumentButtons } from './shareDispatch';
 
 export function QuotationPreviewModal({ company, customers = [], inquiry, onClose }) {
@@ -24,7 +24,10 @@ export function QuotationPreviewModal({ company, customers = [], inquiry, onClos
     return sum + qty * sell;
   }, 0) || Number(inquiry.quote_total_sar || inquiry.estimatedValue || 0);
 
-  const vatSar = Number((subtotalSar * 0.15).toFixed(2));
+  // VAT per line (zero-rated / exempt lines carry vatRate 0); lines without a rate are standard 15%
+  const vatSar = items.length
+    ? Number(items.reduce((s, it) => s + (Number(it.qty) || 0) * Number(it.unitSellSar ?? it.sellingPrice ?? it.unit_price ?? it.price ?? 0) * vatRateOf(it), 0).toFixed(2))
+    : Number((subtotalSar * 0.15).toFixed(2));
   const grandTotalSar = Number((subtotalSar + vatSar).toFixed(2));
 
   const issueDate = inquiry.created_at || inquiry.createdAt
@@ -216,7 +219,7 @@ export function QuotationPreviewModal({ company, customers = [], inquiry, onClos
           <div className="flex flex-col sm:flex-row justify-between items-start gap-6">
             <div className="text-[11px] text-slate-500 max-w-md space-y-1">
               <div className="font-bold text-slate-700">Terms &amp; Conditions:</div>
-              <p>1. Prices are quoted in Saudi Riyals (SAR) and subject to 15% KSA Value Added Tax (VAT).</p>
+              <p>1. Prices are quoted in Saudi Riyals (SAR) and subject to KSA Value Added Tax (VAT) at the rate shown for each line (15% unless zero-rated or exempt).</p>
               <p>2. Please issue an official Purchase Order referencing <strong>{quoteNumber}</strong> to initiate mobilization.</p>
             </div>
 
@@ -226,7 +229,7 @@ export function QuotationPreviewModal({ company, customers = [], inquiry, onClos
                 <span className="font-mono font-bold">SAR {formatSAR(subtotalSar)}</span>
               </div>
               <div className="flex justify-between px-4 py-2.5 border-b border-slate-200">
-                <span className="text-slate-600">KSA VAT (15%):</span>
+                <span className="text-slate-600">KSA VAT:</span>
                 <span className="font-mono font-semibold">SAR {formatSAR(vatSar)}</span>
               </div>
               <div className="flex justify-between px-4 py-3 bg-slate-900 text-white font-bold text-sm">
@@ -680,7 +683,7 @@ export function SalesOrderPreviewModal({ company, customers = [], so, onClose })
                 <span className="font-mono font-bold">SAR {formatSAR(subtotalSar)}</span>
               </div>
               <div className="flex justify-between px-4 py-2.5 border-b border-slate-200">
-                <span className="text-slate-600">KSA VAT (15%):</span>
+                <span className="text-slate-600">KSA VAT:</span>
                 <span className="font-mono font-semibold">SAR {formatSAR(vatSar)}</span>
               </div>
               <div className="flex justify-between px-4 py-3 bg-slate-900 text-white font-bold text-sm">

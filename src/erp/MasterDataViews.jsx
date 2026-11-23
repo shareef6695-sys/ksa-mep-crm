@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Plus, Users, Truck, Package, CheckCircle2, X, Building2 } from 'lucide-react';
-import { formatSAR } from './erpEngine';
+import { formatSAR, isValidKsaVat, VAT_EXEMPTION_REASONS } from './erpEngine';
 
 export const STANDARD_UOMS = [
   { code: 'PCS', label: 'PCS — Pieces / Numbers' },
@@ -31,7 +31,7 @@ export const ZATCA_VAT_TYPES = [
 // ============================================================================
 // 1. CUSTOMERS MASTER VIEW (UNDER SALES & FULFILLMENT)
 // ============================================================================
-export function CustomersMasterView({ supabase, customers, salesmenList, onRefresh }) {
+export function CustomersMasterView({ supabase, customers, salesmenList, onRefresh, readOnly = false }) {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
     name_en: '',
@@ -45,25 +45,40 @@ export function CustomersMasterView({ supabase, customers, salesmenList, onRefre
     city: 'Jeddah',
     address_en: '',
     address_ar: '',
+    building_no: '',
+    street: '',
+    district: '',
+    postal_code: '',
+    additional_no: '',
     credit_limit_sar: 0,
     payment_terms: 'Net 30',
     assigned_salesman_id: '',
   });
+  const [saveError, setSaveError] = useState('');
 
   const handleSaveCustomer = async (e) => {
     e.preventDefault();
+    setSaveError('');
+    // ZATCA: a KSA VAT number is 15 digits starting and ending with 3; B2B tax invoices need the buyer's
+    // national address (building no, street, district, city, postal code). The database enforces the format too.
+    if (form.vat_number && !isValidKsaVat(form.vat_number)) return setSaveError('VAT number must be 15 digits, starting and ending with 3.');
+    if (form.customer_type === 'B2B' && !/^\d{4}$/.test(form.building_no)) return setSaveError('Building number must be 4 digits.');
+    if (form.customer_type === 'B2B' && !/^\d{5}$/.test(form.postal_code)) return setSaveError('Postal code must be 5 digits.');
     const { data: code } = await supabase.rpc('next_doc_number', { p_doc_type: 'CUSTOMER' });
-    await supabase.from('customers').insert({
+    const { error } = await supabase.from('customers').insert({
       id: `cust-${Date.now()}`,
       customer_code: code,
       ...form,
       credit_limit_sar: Number(form.credit_limit_sar) || 0,
       assigned_salesman_id: form.assigned_salesman_id || null,
+      address_en: form.address_en || [form.building_no, form.street, form.district, form.city, form.postal_code].filter(Boolean).join(', '),
     });
+    if (error) return setSaveError(error.message);
     setShowForm(false);
     setForm({
       name_en: '', name_ar: '', customer_type: 'B2B', vat_number: '', cr_number: '',
       contact_person: '', phone: '', email: '', city: 'Jeddah', address_en: '', address_ar: '',
+      building_no: '', street: '', district: '', postal_code: '', additional_no: '',
       credit_limit_sar: 0, payment_terms: 'Net 30', assigned_salesman_id: '',
     });
     onRefresh();
@@ -77,6 +92,7 @@ export function CustomersMasterView({ supabase, customers, salesmenList, onRefre
           <p className="text-xs text-slate-500">Full B2B &amp; B2C customer directory with 15-digit VAT numbers, Arabic legal names, and credit limits.</p>
         </div>
         <button
+          hidden={readOnly}
           onClick={() => setShowForm(!showForm)}
           className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
         >
@@ -84,8 +100,9 @@ export function CustomersMasterView({ supabase, customers, salesmenList, onRefre
         </button>
       </div>
 
-      {showForm && (
+      {showForm && !readOnly && (
         <form onSubmit={handleSaveCustomer} className="bg-white border border-blue-200 rounded-2xl p-5 shadow-sm space-y-4 text-xs">
+          {saveError && <div className="bg-rose-50 border border-rose-200 text-rose-800 rounded-xl p-2.5">{saveError}</div>}
           <div className="border-b border-slate-100 pb-2.5 flex items-center justify-between">
             <span className="font-bold text-sm text-slate-900">Create New Customer (Mandatory Fields Marked *)</span>
             <button type="button" onClick={() => setShowForm(false)}><X className="w-4 h-4 text-slate-400" /></button>
@@ -154,9 +171,21 @@ export function CustomersMasterView({ supabase, customers, salesmenList, onRefre
               <label className="block font-semibold text-slate-700 mb-1">City *</label>
               <input type="text" required value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2" />
             </div>
+            {[
+              ['building_no', 'Building No (4 digits)', form.customer_type === 'B2B', '1234'],
+              ['street', 'Street', form.customer_type === 'B2B', 'King Abdulaziz Rd'],
+              ['district', 'District', form.customer_type === 'B2B', 'Al Rawdah'],
+              ['postal_code', 'Postal Code (5 digits)', form.customer_type === 'B2B', '23435'],
+              ['additional_no', 'Additional No', false, '5678'],
+            ].map(([k, label, req, ph]) => (
+              <div key={k}>
+                <label className="block font-semibold text-slate-700 mb-1">{label} {req ? '*' : ''}</label>
+                <input type="text" required={req} value={form[k]} onChange={(e) => setForm({ ...form, [k]: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2" placeholder={ph} />
+              </div>
+            ))}
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">National Address (English) *</label>
-              <input type="text" required value={form.address_en} onChange={(e) => setForm({ ...form, address_en: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2" placeholder="Building No, Street, District, Postal Code" />
+              <label className="block font-semibold text-slate-700 mb-1">Address line (English, optional)</label>
+              <input type="text" value={form.address_en} onChange={(e) => setForm({ ...form, address_en: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2" placeholder="Built from the fields above if left empty" />
             </div>
             <div>
               <label className="block font-semibold text-slate-700 mb-1">National Address (Arabic)</label>
@@ -218,7 +247,7 @@ export function CustomersMasterView({ supabase, customers, salesmenList, onRefre
 // ============================================================================
 // 2. VENDORS / SUPPLIERS MASTER VIEW (UNDER PURCHASE FULL CYCLE)
 // ============================================================================
-export function VendorsMasterView({ supabase, vendors, currencies, onRefresh }) {
+export function VendorsMasterView({ supabase, vendors, currencies, onRefresh, readOnly = false }) {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
     name_en: '',
@@ -236,15 +265,21 @@ export function VendorsMasterView({ supabase, vendors, currencies, onRefresh }) 
     payment_terms: 'Net 30',
     iban: '',
   });
+  const [saveError, setSaveError] = useState('');
 
   const handleSaveVendor = async (e) => {
     e.preventDefault();
+    setSaveError('');
+    // Only a KSA supplier's number is checked against the ZATCA format; foreign tax IDs vary.
+    if (form.vendor_origin === 'KSA' && !isValidKsaVat(form.vat_number)) return setSaveError('KSA VAT number must be 15 digits, starting and ending with 3.');
     const { data: code } = await supabase.rpc('next_doc_number', { p_doc_type: 'VENDOR' });
-    await supabase.from('vendors').insert({
+    const { error } = await supabase.from('vendors').insert({
       id: `vend-${Date.now()}`,
       vendor_code: code,
       ...form,
+      is_ksa_vat_registered: form.vendor_origin === 'KSA',
     });
+    if (error) return setSaveError(error.message);
     setShowForm(false);
     setForm({
       name_en: '', name_ar: '', vendor_origin: 'KSA', vat_number: '', cr_number: '',
@@ -262,6 +297,7 @@ export function VendorsMasterView({ supabase, vendors, currencies, onRefresh }) 
           <p className="text-xs text-slate-500">Manage local KSA (15% Input VAT) and international OEM/trading suppliers with default billing currencies &amp; IBANs.</p>
         </div>
         <button
+          hidden={readOnly}
           onClick={() => setShowForm(!showForm)}
           className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
         >
@@ -269,8 +305,9 @@ export function VendorsMasterView({ supabase, vendors, currencies, onRefresh }) 
         </button>
       </div>
 
-      {showForm && (
+      {showForm && !readOnly && (
         <form onSubmit={handleSaveVendor} className="bg-white border border-blue-200 rounded-2xl p-5 shadow-sm space-y-4 text-xs">
+          {saveError && <div className="bg-rose-50 border border-rose-200 text-rose-800 rounded-xl p-2.5">{saveError}</div>}
           <div className="border-b border-slate-100 pb-2.5 flex items-center justify-between">
             <span className="font-bold text-sm text-slate-900">Create New Vendor / Supplier (Mandatory Fields Marked *)</span>
             <button type="button" onClick={() => setShowForm(false)}><X className="w-4 h-4 text-slate-400" /></button>
@@ -407,7 +444,7 @@ export function VendorsMasterView({ supabase, vendors, currencies, onRefresh }) 
 // ============================================================================
 // 3. ITEMS MASTER VIEW (GOODS & SERVICES, STANDARD + CUSTOM UOM, ZATCA VAT)
 // ============================================================================
-export function ItemsMasterView({ supabase, items, customUoms, vendors, customers, currencies, onRefresh }) {
+export function ItemsMasterView({ supabase, items, customUoms, vendors, customers, currencies, onRefresh, readOnly = false }) {
   const [showForm, setShowForm] = useState(false);
   const [showCustomUomInput, setShowCustomUomInput] = useState(false);
   const [customUomCode, setCustomUomCode] = useState('');
@@ -429,6 +466,8 @@ export function ItemsMasterView({ supabase, items, customUoms, vendors, customer
     link_to_customer: false,
     preferred_customer_id: '',
     is_stocked_item: false,
+    is_serialized: false,
+    reorder_level: '',
   });
 
   const allUoms = [...STANDARD_UOMS, ...customUoms];
@@ -468,6 +507,8 @@ export function ItemsMasterView({ supabase, items, customUoms, vendors, customer
       link_to_customer: form.link_to_customer,
       preferred_customer_id: form.link_to_customer && form.preferred_customer_id ? form.preferred_customer_id : null,
       is_stocked_item: form.item_type === 'Goods' ? form.is_stocked_item : false,
+      is_serialized: form.item_type === 'Goods' && form.is_stocked_item ? form.is_serialized : false,
+      reorder_level: form.item_type === 'Goods' && form.is_stocked_item ? Number(form.reorder_level) || 0 : 0,
     });
 
     setShowForm(false);
@@ -476,7 +517,7 @@ export function ItemsMasterView({ supabase, items, customUoms, vendors, customer
       sales_price_sar: '', purchase_price: '', purchase_currency: 'SAR',
       zatca_vat_type: 'S', zatca_exemption_reason: '',
       link_to_supplier: false, preferred_vendor_id: '',
-      link_to_customer: false, preferred_customer_id: '', is_stocked_item: false,
+      link_to_customer: false, preferred_customer_id: '', is_stocked_item: false, is_serialized: false, reorder_level: '',
     });
     onRefresh();
   };
@@ -489,6 +530,7 @@ export function ItemsMasterView({ supabase, items, customUoms, vendors, customer
           <p className="text-xs text-slate-500">Define Goods or Services with Standard/Custom UOMs, mandatory Sales &amp; Purchase prices, ZATCA VAT categories, and Supplier/Customer links.</p>
         </div>
         <button
+          hidden={readOnly}
           onClick={() => setShowForm(!showForm)}
           className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
         >
@@ -496,7 +538,7 @@ export function ItemsMasterView({ supabase, items, customUoms, vendors, customer
         </button>
       </div>
 
-      {showForm && (
+      {showForm && !readOnly && (
         <form onSubmit={handleSaveItem} className="bg-white border border-blue-200 rounded-2xl p-5 shadow-sm space-y-4 text-xs">
           <div className="border-b border-slate-100 pb-2.5 flex items-center justify-between">
             <span className="font-bold text-sm text-slate-900">Create Item or Service (All Mandatory Fields Marked *)</span>
@@ -659,15 +701,35 @@ export function ItemsMasterView({ supabase, items, customUoms, vendors, customer
 
           {selectedVatMeta.requiresReason && (
             <div>
-              <label className="block font-semibold text-amber-800 mb-1">ZATCA Zero/Exempt/Out-of-Scope Reason Text *</label>
-              <input
-                type="text"
+              <label className="block font-semibold text-amber-800 mb-1">ZATCA Exemption / Zero-Rating Reason *</label>
+              <select
                 required
                 value={form.zatca_exemption_reason}
                 onChange={(e) => setForm({ ...form, zatca_exemption_reason: e.target.value })}
                 className="w-full border border-amber-300 bg-amber-50/40 rounded-xl px-3 py-2"
-                placeholder="e.g. Export outside GCC per KSA VAT Implementing Regulations Art. 32"
-              />
+              >
+                <option value="">Select the ZATCA reason code…</option>
+                {VAT_EXEMPTION_REASONS.filter((r) => r.category === form.zatca_vat_type).map((r) => (
+                  <option key={r.code} value={r.code}>{r.code} — {r.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Stock tracking (0011) */}
+          {form.item_type === 'Goods' && (
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 grid sm:grid-cols-3 gap-3 items-center">
+              <label className="flex items-center gap-2 font-semibold text-slate-800 cursor-pointer">
+                <input type="checkbox" checked={form.is_stocked_item} onChange={(e) => setForm({ ...form, is_stocked_item: e.target.checked })} className="w-4 h-4" />
+                Keep in stock (warehouse item)
+              </label>
+              <label className={`flex items-center gap-2 font-semibold cursor-pointer ${form.is_stocked_item ? 'text-slate-800' : 'text-slate-400'}`}>
+                <input type="checkbox" disabled={!form.is_stocked_item} checked={form.is_serialized} onChange={(e) => setForm({ ...form, is_serialized: e.target.checked })} className="w-4 h-4" />
+                Track serial numbers
+              </label>
+              <input type="number" min="0" step="any" disabled={!form.is_stocked_item} value={form.reorder_level} onChange={(e) => setForm({ ...form, reorder_level: e.target.value })}
+                placeholder="Reorder level" className="border border-slate-300 rounded-xl px-3 py-2 disabled:bg-slate-100" />
+              <p className="sm:col-span-3 text-[11px] text-slate-500">Non-stock goods (bought for one order, shipped by the supplier) are expensed when billed and are not counted.</p>
             </div>
           )}
 
@@ -761,10 +823,12 @@ export function ItemsMasterView({ supabase, items, customUoms, vendors, customer
                 </div>
 
                 <div className="flex items-center gap-4 text-right text-xs">
-                  <div>
-                    <div className="text-slate-400">Purchase Cost</div>
-                    <div className="font-semibold text-slate-700">{it.purchase_currency} {formatSAR(it.purchase_price)}</div>
-                  </div>
+                  {it.purchase_price !== null && it.purchase_price !== undefined && (
+                    <div>
+                      <div className="text-slate-400">Purchase Cost</div>
+                      <div className="font-semibold text-slate-700">{it.purchase_currency} {formatSAR(it.purchase_price)}</div>
+                    </div>
+                  )}
                   <div>
                     <div className="text-slate-400">Sales Price</div>
                     <div className="font-bold text-blue-700 text-sm">SAR {formatSAR(it.sales_price_sar)}</div>
