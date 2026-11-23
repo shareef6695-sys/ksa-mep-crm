@@ -159,7 +159,7 @@ export function useAdminActions(s) {
     setNewInq((prev) => ({
       ...prev,
       itemId: id,
-      firstItemDesc: `${quickItem.name_en} (${quickItem.name_ar})`,
+      firstItemDesc: quickItem.name_ar ? `${quickItem.name_en} (${quickItem.name_ar})` : quickItem.name_en,
       firstItemUom: quickItem.uom,
       firstItemCost: parseFloat(quickItem.purchase_price) || 0,
       firstItemCurrency: quickItem.purchase_currency,

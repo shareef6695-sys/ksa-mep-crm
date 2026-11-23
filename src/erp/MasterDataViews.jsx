@@ -129,8 +129,8 @@ export function CustomersMasterView({ supabase, customers, salesmenList, onRefre
               <input type="text" required value={form.name_en} onChange={(e) => setForm({ ...form, name_en: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2" placeholder="Al-Haramain Contracting Co." />
             </div>
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Legal Name (Arabic) *</label>
-              <input type="text" dir="rtl" required value={form.name_ar} onChange={(e) => setForm({ ...form, name_ar: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2" placeholder="شركة الحرمين للمقاولات" />
+              <label className="block font-semibold text-slate-700 mb-1">Legal Name (Arabic) <span className="font-normal text-slate-400">(optional)</span></label>
+              <input type="text" dir="rtl" value={form.name_ar} onChange={(e) => setForm({ ...form, name_ar: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2" placeholder="شركة الحرمين للمقاولات" />
             </div>
             <div>
               <label className="block font-semibold text-slate-700 mb-1">ZATCA Buyer Type *</label>
@@ -160,9 +160,9 @@ export function CustomersMasterView({ supabase, customers, salesmenList, onRefre
               <input type="text" required value={form.cr_number} onChange={(e) => setForm({ ...form, cr_number: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2 font-mono" placeholder="4030XXXXXX" />
             </div>
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Assigned Account Salesman *</label>
-              <select required value={form.assigned_salesman_id} onChange={(e) => setForm({ ...form, assigned_salesman_id: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2 bg-white">
-                <option value="">Select Salesman...</option>
+              <label className="block font-semibold text-slate-700 mb-1">Assigned Account Salesman <span className="font-normal text-slate-400">(optional)</span></label>
+              <select value={form.assigned_salesman_id} onChange={(e) => setForm({ ...form, assigned_salesman_id: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2 bg-white">
+                <option value="">Unassigned</option>
                 {salesmenList.map((s) => (
                   <option key={s.id} value={s.id}>{s.full_name} ({s.commission_pct || 0}%)</option>
                 ))}
@@ -655,8 +655,8 @@ export function ItemsMasterView({ supabase, items, customUoms, vendors, customer
               <input type="text" required value={form.name_en} onChange={(e) => setForm({ ...form, name_en: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2" placeholder="e.g. Cat6 UTP Cable 305m Box / Annual CCTV Maintenance" />
             </div>
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Item / Service Description (Arabic - ZATCA) *</label>
-              <input type="text" dir="rtl" required value={form.name_ar} onChange={(e) => setForm({ ...form, name_ar: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2" placeholder="الوصف بالعربية للفاتورة الضريبية" />
+              <label className="block font-semibold text-slate-700 mb-1">Item / Service Description (Arabic) <span className="font-normal text-slate-400">(optional)</span></label>
+              <input type="text" dir="rtl" value={form.name_ar} onChange={(e) => setForm({ ...form, name_ar: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2" placeholder="الوصف بالعربية للفاتورة الضريبية" />
             </div>
           </div>
 

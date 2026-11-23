@@ -184,7 +184,6 @@ export function checkCustomer(c, { existing = [] } = {}) {
     if (missing.length === 5) warnings.push('No address');
     else if (missing.length) warnings.push(`Address incomplete: ${missing.join(', ')}`);
   }
-  if (!c.name_ar && c.customer_type === 'B2B') warnings.push('No Arabic name');
   if (!c.email && !c.phone) warnings.push('No email or phone');
   return { errors, warnings, duplicate: !!dup };
 }

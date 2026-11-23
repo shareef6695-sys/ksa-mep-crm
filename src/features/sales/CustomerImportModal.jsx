@@ -157,7 +157,7 @@ export function CustomerImportModal({ supabase, customers, onClose, onImported }
                 {!!result.skipped && <span className="px-2.5 py-1 rounded-lg bg-slate-100 font-semibold flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> {result.skipped} skipped (already in the ERP)</span>}
                 {!!result.rejected && <span className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 font-semibold flex items-center gap-1"><XCircle className="w-3.5 h-3.5" /> {result.rejected} rejected</span>}
               </div>
-              <p className="text-slate-600">Download the report for the list of customers that still need a VAT number, address or Arabic name.</p>
+              <p className="text-slate-600">Download the report for the list of customers that still need a VAT number or address.</p>
               <button type="button" onClick={downloadReport} className="px-3.5 py-2 rounded-xl border border-slate-300 font-semibold flex items-center gap-1.5">
                 <Download className="w-4 h-4" /> Download import report
               </button>
