@@ -1,17 +1,32 @@
 import React, { useState } from 'react';
 import { RotateCcw, QrCode, Printer, X, Plus } from 'lucide-react';
-import { generateZatcaQrBase64, formatSAR } from './erpEngine';
-import { postAutoJournal } from './glEngine';
+import { formatSAR } from './erpEngine';
 import { ShareDocumentButtons } from './shareDispatch';
+import { DebitNotesPanel } from './DebitNotesPanel';
+import { QrImage } from '../ui/QrImage';
+import { blocksSharing, callZatca, needsSubmission, submitAfterPosting, zatcaQr, zatcaStatus } from '../lib/zatca';
+
+// Reason shown on the credit note -> code stored for ZATCA (0006)
+const REASONS = [
+  { label: 'Sales Return / Defective Material', code: 'RETURN' },
+  { label: 'Damaged in Transit', code: 'DAMAGED' },
+  { label: 'Post-Invoice Commercial Discount', code: 'PRICE_ADJUSTMENT' },
+  { label: 'Cancelled Scope / Partial Cancellation', code: 'CANCELLATION' },
+  { label: 'Quantity / Billing Correction', code: 'OTHER' },
+];
 
 export function CreditNotesView({
   supabase,
   company,
   invoices,
   creditNotes,
+  debitNotes = [],
+  canDebit = false,
+  canSubmitZatca = false,
   commissions,
   profile,
   onRefresh,
+  readOnly = false,
 }) {
   const [showModal, setShowModal] = useState(false);
   const [selectedInvId, setSelectedInvId] = useState('');
@@ -19,21 +34,34 @@ export function CreditNotesView({
   const [returnQtys, setReturnQtys] = useState({});
   const [previewCN, setPreviewCN] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [creditedQty, setCreditedQty] = useState([]); // already credited per invoice line (0006)
+  const [zBusy, setZBusy] = useState(null);
+  const invTypeOf = (cn) => invoices.find((i) => i.id === cn.original_invoice_id)?.invoice_type;
+  const submitCn = async (cn) => {
+    setZBusy(cn.id);
+    try {
+      const r = await callZatca(supabase, 'submit', { doc_type: 'credit_note', doc_id: cn.id });
+      window.alert(`ZATCA: ${r?.status || 'done'}`);
+    } catch (err) {
+      window.alert(`ZATCA submission failed: ${err.message}`);
+    } finally {
+      setZBusy(null);
+      onRefresh();
+    }
+  };
 
   const selectedInvoice = invoices.find((i) => i.id === selectedInvId) || null;
+  const leftQty = (it, idx) => Math.max(0, (Number(it.qty) || 0) - (Number(creditedQty[idx]) || 0));
+  // invoices that still have value left to credit
+  const creditableInvoices = invoices.filter((i) => Number(i.grand_total_sar || 0) + Number(i.debited_amount_sar || 0) - Number(i.credited_amount_sar || 0) > 0.01);
 
-  const handleSelectInvoice = (invId) => {
+  const handleSelectInvoice = async (invId) => {
     setSelectedInvId(invId);
-    const inv = invoices.find((i) => i.id === invId);
-    if (!inv) {
-      setReturnQtys({});
-      return;
-    }
-    const init = {};
-    (inv.items || []).forEach((it, idx) => {
-      init[idx] = Number(it.qty) || 0;
-    });
-    setReturnQtys(init);
+    setReturnQtys({});
+    setCreditedQty([]);
+    if (!invId) return;
+    const { data, error } = await supabase.rpc('invoice_credited_qty', { p_invoice_id: invId });
+    if (!error && Array.isArray(data)) setCreditedQty(data.map((q) => Number(q) || 0));
   };
 
   const handleIssueCreditNote = async (e) => {
@@ -42,113 +70,33 @@ export function CreditNotesView({
     setSubmitting(true);
 
     try {
-      const returnedLines = [];
-      let subtotal = 0;
-      let costReversed = 0;
-
-      (selectedInvoice.items || []).forEach((it, idx) => {
-        const retQty = Math.min(Number(it.qty) || 0, Math.max(0, Number(returnQtys[idx]) || 0));
-        if (retQty > 0) {
-          returnedLines.push({
-            desc: it.desc,
-            qty: retQty,
-            unit: it.unit || 'PCS',
-            unitSellSar: Number(it.unitSellSar) || 0,
-            unitCostSar: Number(it.unitCostSar) || 0,
-          });
-          subtotal += retQty * (Number(it.unitSellSar) || 0);
-          costReversed += retQty * (Number(it.unitCostSar) || 0);
-        }
+      // One transaction in the database: credit note + journal + invoice balance + commission (0004_posting.sql)
+      const qtys = (selectedInvoice.items || []).map((_, idx) => Math.max(0, Number(returnQtys[idx]) || 0));
+      if (!qtys.some((q) => q > 0)) return;
+      const { data: insertedCN, error } = await supabase.rpc('post_credit_note', {
+        p_invoice_id: selectedInvoice.id,
+        p_return_qtys: qtys,
+        p_reason: reason,
+        p_reason_code: REASONS.find((r) => r.label === reason)?.code || 'OTHER',
       });
-
-      if (returnedLines.length === 0 || subtotal <= 0) {
-        setSubmitting(false);
+      if (error) {
+        window.alert(`Credit note could not be issued: ${error.message}`);
         return;
-      }
-
-      const vat = subtotal * 0.15;
-      const grandTotal = subtotal + vat;
-      const { data: cnNum } = await supabase.rpc('next_doc_number', { p_doc_type: 'CREDIT_NOTE' });
-      const issuedIso = new Date().toISOString();
-
-      const qrBase64 = generateZatcaQrBase64({
-        sellerName: company.nameEn,
-        vatNumber: company.vatNumber,
-        timestampIso: issuedIso,
-        totalWithVat: grandTotal,
-        vatAmount: vat,
-      });
-
-      const newCN = {
-        id: `cn-${Date.now()}`,
-        credit_note_number: cnNum,
-        original_invoice_id: selectedInvoice.id,
-        original_invoice_number: selectedInvoice.invoice_number,
-        client_name: selectedInvoice.client_name,
-        client_vat: selectedInvoice.client_vat || '',
-        reason,
-        items: returnedLines,
-        subtotal_sar: Number(subtotal.toFixed(2)),
-        vat_sar: Number(vat.toFixed(2)),
-        grand_total_sar: Number(grandTotal.toFixed(2)),
-        landed_cost_reversed_sar: Number(costReversed.toFixed(2)),
-        qr_base64: qrBase64,
-        issued_by: profile?.full_name || 'Finance',
-        issued_at: issuedIso,
-      };
-
-      const { data: insertedCN } = await supabase.from('credit_notes').insert(newCN).select().single();
-      await postAutoJournal({ supabase, entryDate: issuedIso.slice(0, 10), sourceModule: 'CREDIT_NOTE', sourceDocNumber: cnNum, description: 'ZATCA Credit Note ' + cnNum + ' vs ' + selectedInvoice.invoice_number + ' (' + selectedInvoice.client_name + ')', postedBy: profile?.full_name || 'Finance', lines: [{ account_code: '4090', account_name: '4090 - Sales Returns & Credit Notes', debit: subtotal, credit: 0, memo: reason }, { account_code: '2100', account_name: '2100 - VAT Payable / Output VAT (15%)', debit: vat, credit: 0, memo: 'VAT Reversal 15%' }, { account_code: '1100', account_name: '1100 - Accounts Receivable (Trade Customers)', debit: 0, credit: grandTotal, memo: selectedInvoice.client_name }, { account_code: '1200', account_name: '1200 - Inventory / Warehouse Stock Asset', debit: costReversed, credit: 0, memo: 'Stock Return Valuation' }, { account_code: '5010', account_name: '5010 - Cost of Goods Sold (Landed COGS)', debit: 0, credit: costReversed, memo: 'COGS Reversal' }] });
-
-      // 1. Reduce Original Invoice Payable Balance
-      const revisedInvTotal = Math.max(0, Number(selectedInvoice.grand_total_sar) - grandTotal);
-      const paidSoFar = Number(selectedInvoice.paid_amount_sar || 0);
-      const nextPayStatus =
-        revisedInvTotal <= 0.01 || paidSoFar >= revisedInvTotal - 0.01
-          ? 'paid'
-          : paidSoFar > 0
-          ? 'partial'
-          : 'unpaid';
-
-      await supabase
-        .from('invoices')
-        .update({
-          grand_total_sar: Number(revisedInvTotal.toFixed(2)),
-          payment_status: nextPayStatus,
-        })
-        .eq('id', selectedInvoice.id);
-
-      // 2. Claw back proportional Salesman Net Profit Share
-      const commRow = commissions.find((c) => c.invoice_id === selectedInvoice.id);
-      if (commRow) {
-        const profitReturned = Math.max(0, subtotal - costReversed);
-        const revisedNetProfit = Math.max(0, Number(commRow.net_profit_sar) - profitReturned);
-        const revisedEligible = Number(((revisedNetProfit * Number(commRow.commission_pct)) / 100).toFixed(2));
-        const collectionRatio = revisedInvTotal > 0 ? Math.min(1, paidSoFar / revisedInvTotal) : 0;
-        const revisedUnlocked = Number((revisedEligible * collectionRatio).toFixed(2));
-
-        await supabase
-          .from('commission_ledger')
-          .update({
-            net_profit_sar: Number(revisedNetProfit.toFixed(2)),
-            total_eligible_commission_sar: revisedEligible,
-            unlocked_commission_sar: revisedUnlocked,
-            status:
-              revisedEligible <= 0
-                ? 'reversed_by_credit_note'
-                : collectionRatio >= 0.999
-                ? 'ready_for_payout'
-                : revisedUnlocked > 0
-                ? 'partially_unlocked'
-                : 'awaiting_collection',
-            updated_at: issuedIso,
-          })
-          .eq('id', commRow.id);
       }
 
       setShowModal(false);
       setSelectedInvId('');
-      if (insertedCN) setPreviewCN(insertedCN);
+      if (insertedCN && Number(insertedCN.to_customer_credit_sar) > 0) {
+        window.alert(`${insertedCN.credit_note_number}: the customer had already paid, so SAR ${formatSAR(insertedCN.to_customer_credit_sar)} is now customer credit. Apply it to another invoice or refund it from AR Customer Receipts.`);
+      }
+      if (insertedCN) {
+        // Phase 2: clear (B2B) / report (B2C) with ZATCA straight away
+        const msg = await submitAfterPosting(supabase, 'credit_note', insertedCN);
+        const { data: fresh } = await supabase.from('credit_notes_v').select('*').eq('id', insertedCN.id).maybeSingle();
+        const cn = fresh || insertedCN;
+        if (!blocksSharing(cn, selectedInvoice.invoice_type)) setPreviewCN(cn);
+        if (msg) window.alert(`${cn.credit_note_number}: ${msg}`);
+      }
       onRefresh();
     } finally {
       setSubmitting(false);
@@ -165,6 +113,7 @@ export function CreditNotesView({
           </p>
         </div>
         <button
+          hidden={readOnly}
           onClick={() => setShowModal(true)}
           className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
         >
@@ -188,9 +137,10 @@ export function CreditNotesView({
                   <span className="text-xs font-semibold bg-slate-100 px-2 py-0.5 rounded">
                     Ref Invoice: {cn.original_invoice_number}
                   </span>
-                  <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
-                    ZATCA TLV QR
-                  </span>
+                  {(() => {
+                    const z = zatcaStatus(cn);
+                    return <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${z.tone === 'positive' ? 'bg-emerald-50 text-emerald-800' : z.tone === 'negative' ? 'bg-rose-50 text-rose-800' : z.tone === 'critical' ? 'bg-amber-50 text-amber-800' : 'bg-slate-100 text-slate-700'}`}>ZATCA: {z.label}</span>;
+                  })()}
                 </div>
                 <h3 className="text-base font-bold mt-1">{cn.client_name}</h3>
                 <p className="text-xs text-slate-500">
@@ -198,18 +148,24 @@ export function CreditNotesView({
                 </p>
               </div>
 
-              <ShareDocumentButtons company={company} docType="ZATCA Credit Note" docNumber={cn.credit_note_number} clientName={cn.client_name} totalSar={cn.grand_total_sar} compact /> <button onClick={() => setPreviewCN(cn)}
-                className="px-3 py-2 rounded-xl border border-slate-300 hover:bg-slate-50 text-xs font-semibold flex items-center gap-1.5 cursor-pointer self-start sm:self-center"
+              <div className="flex flex-wrap items-center gap-2">
+              {canSubmitZatca && needsSubmission(cn) && (
+                <button type="button" disabled={zBusy === cn.id} onClick={() => submitCn(cn)} className="px-3 py-2 rounded-xl bg-amber-500 text-white text-xs font-semibold cursor-pointer disabled:bg-slate-300">{zBusy === cn.id ? 'Sending…' : 'Send to ZATCA'}</button>
+              )}
+              {!blocksSharing(cn, invTypeOf(cn)) && <ShareDocumentButtons company={company} docType="ZATCA Credit Note" docNumber={cn.credit_note_number} clientName={cn.client_name} totalSar={cn.grand_total_sar} compact />}
+              <button onClick={() => setPreviewCN(cn)} disabled={blocksSharing(cn, invTypeOf(cn))} title={blocksSharing(cn, invTypeOf(cn)) ? 'Available once ZATCA has cleared this credit note' : undefined}
+                className="px-3 py-2 rounded-xl border border-slate-300 hover:bg-slate-50 text-xs font-semibold flex items-center gap-1.5 cursor-pointer self-start sm:self-center disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <QrCode className="w-4 h-4" /> View ZATCA Credit Note
               </button>
+              </div>
             </div>
           ))}
         </div>
       )}
 
       {/* MODAL: ISSUE ZATCA CREDIT NOTE */}
-      {showModal && (
+      {showModal && !readOnly && (
         <div className="fixed inset-0 bg-slate-950/70 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b pb-3">
@@ -229,9 +185,9 @@ export function CreditNotesView({
                   className="w-full border border-slate-300 rounded-xl px-3 py-2.5 bg-white font-semibold"
                 >
                   <option value="">Select Posted Invoice...</option>
-                  {invoices.map((inv) => (
+                  {creditableInvoices.map((inv) => (
                     <option key={inv.id} value={inv.id}>
-                      {inv.invoice_number} — {inv.client_name} (SAR {formatSAR(inv.grand_total_sar)})
+                      {inv.invoice_number} — {inv.client_name} (SAR {formatSAR(inv.grand_total_sar)}{Number(inv.credited_amount_sar) > 0 ? `, credited ${formatSAR(inv.credited_amount_sar)}` : ''})
                     </option>
                   ))}
                 </select>
@@ -244,10 +200,7 @@ export function CreditNotesView({
                   onChange={(e) => setReason(e.target.value)}
                   className="w-full border border-slate-300 rounded-xl px-3 py-2.5 bg-white"
                 >
-                  <option value="Sales Return / Defective Material">Sales Return / Defective Material</option>
-                  <option value="Post-Invoice Commercial Discount">Post-Invoice Commercial Discount</option>
-                  <option value="Quantity / Billing Correction">Quantity / Billing Correction</option>
-                  <option value="Cancelled Scope / Partial Cancellation">Cancelled Scope / Partial Cancellation</option>
+                  {REASONS.map((r) => <option key={r.code + r.label} value={r.label}>{r.label}</option>)}
                 </select>
               </div>
 
@@ -260,13 +213,15 @@ export function CreditNotesView({
                         <div className="font-bold">{it.desc}</div>
                         <div className="text-slate-500">
                           Invoiced Qty: {it.qty} • Unit Price: SAR {formatSAR(it.unitSellSar)}
+                          {Number(creditedQty[idx]) > 0 && <> • <span className="text-rose-700 font-semibold">Already credited: {creditedQty[idx]}</span></>} • Left: {leftQty(it, idx)}
                         </div>
                       </div>
                       <input
                         type="number"
                         min="0"
-                        max={it.qty}
+                        max={leftQty(it, idx)}
                         step="any"
+                        disabled={leftQty(it, idx) <= 0}
                         value={returnQtys[idx] ?? 0}
                         onChange={(e) => setReturnQtys({ ...returnQtys, [idx]: e.target.value })}
                         className="w-20 border border-slate-300 rounded-lg px-2.5 py-1.5 text-right font-bold bg-white"
@@ -306,18 +261,16 @@ export function CreditNotesView({
 
             <div className="flex justify-between items-start gap-4 border-b pb-4">
               <div className="space-y-1 text-xs">
-                <div className="text-lg font-bold text-slate-900">{company?.logoUrl && (<img src={company.logoUrl} alt="Company Logo" className="h-12 max-w-[160px] object-contain mb-1.5" />)}`n                  {company.nameEn}</div>
+                <div className="text-lg font-bold text-slate-900">{company?.logoUrl && (<img src={company.logoUrl} alt="Company Logo" className="h-12 max-w-[160px] object-contain mb-1.5" />)}
+                  {company.nameEn}</div>
                 <div className="text-sm font-bold text-blue-700">{company.nameAr}</div>
                 <div className="font-mono font-semibold">VAT Reg / الرقم الضريبي: {company.vatNumber}</div>
-                <div className="text-rose-700 font-semibold">Original Invoice Ref: {previewCN.original_invoice_number}</div>
+                <div className="text-rose-700 font-semibold">Original Invoice Ref: {previewCN.original_invoice_number}{previewCN.original_invoice_date ? ` (${String(previewCN.original_invoice_date).slice(0, 10)})` : ''}</div>
               </div>
               <div className="text-center shrink-0">
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(previewCN.qr_base64)}`}
-                  alt="ZATCA Credit Note QR"
-                  className="w-28 h-28 border border-slate-200 rounded-lg p-1 mx-auto"
-                />
-                <div className="text-[10px] text-slate-500 mt-1 font-mono">ZATCA TLV QR</div>
+                <QrImage value={zatcaQr(previewCN)} size={112} alt="ZATCA Credit Note QR" className="w-28 h-28 border border-slate-200 rounded-lg p-1 mx-auto" />
+                <div className="text-[10px] text-slate-500 mt-1 font-mono">{previewCN.zatca_qr ? 'ZATCA Phase 2 QR' : 'ZATCA Phase 1 QR'}</div>
+                {previewCN.zatca_uuid && <div className="text-[9px] text-slate-400 font-mono mt-0.5">UUID {previewCN.zatca_uuid}</div>}
               </div>
             </div>
 
@@ -378,6 +331,7 @@ export function CreditNotesView({
           </div>
         </div>
       )}
+      <DebitNotesPanel supabase={supabase} company={company} invoices={invoices} debitNotes={debitNotes} canCreate={canDebit && !readOnly} canSubmitZatca={canSubmitZatca} onRefresh={onRefresh} />
     </div>
   );
 }

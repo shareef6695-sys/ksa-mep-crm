@@ -1,0 +1,100 @@
+# Lint, unit tests and build on every push / PR; SQL suites on a throw-away Postgres; end-to-end tests on a local
+# Supabase stack started inside the runner (no project keys needed, nothing touches production).
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  app:
+    name: Lint, unit tests, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+        env:
+          VITE_SUPABASE_URL: http://127.0.0.1:54321
+          VITE_SUPABASE_ANON_KEY: ci-build-placeholder
+
+  sql:
+    name: SQL test suites
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16   # 16.16+ refuses ALTER TABLE under row-type views; migration_rules.test.ts guards this
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v5
+      - run: bash supabase/tests/run_sql_tests.sh
+
+  e2e:
+    name: End-to-end (Playwright)
+    runs-on: ubuntu-latest
+    needs: [app]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: supabase/setup-cli@v3
+        with:
+          version: 2.122.1   # pinned; v3 of the action installs from npm (no GitHub API rate limit)
+      - name: Start a local Supabase stack
+        # migrations are applied below in the documented order (0005 last), so keep them out of `supabase start`
+        run: |
+          mv supabase/migrations /tmp/migrations
+          [ -f supabase/config.toml ] || supabase init --force
+          supabase start -x realtime,storage-api,imgproxy,edge-runtime,logflare,vector,studio,mailpit
+          mv /tmp/migrations supabase/migrations
+          supabase status -o env > /tmp/sb.env
+          cat /tmp/sb.env | grep -E '^(API_URL|DB_URL)='
+      - name: Apply 0001 and seed test users (0002 needs an active admin profile)
+        run: |
+          source /tmp/sb.env
+          DATABASE_URL="$DB_URL" node scripts/apply-migrations.mjs --project local --only 0001
+          sleep 2   # PostgREST reloads its schema cache after 0001
+          SUPABASE_URL="$API_URL" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" node e2e/seed.mjs
+      - name: Apply the remaining migrations (documented order, 0005 last)
+        run: |
+          source /tmp/sb.env
+          DATABASE_URL="$DB_URL" node scripts/apply-migrations.mjs --project local --from 0002
+      - name: Seed test users again (user_roles, after every migration)
+        run: |
+          source /tmp/sb.env
+          sleep 2
+          SUPABASE_URL="$API_URL" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" node e2e/seed.mjs
+      - run: npx playwright install --with-deps chromium
+      - name: Playwright
+        run: |
+          source /tmp/sb.env
+          VITE_SUPABASE_URL="$API_URL" VITE_SUPABASE_ANON_KEY="$ANON_KEY" npx playwright test
+      - uses: actions/upload-artifact@v5
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results

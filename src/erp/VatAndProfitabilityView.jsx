@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { FileSpreadsheet, Printer, TrendingUp, ShieldCheck } from 'lucide-react';
 import { formatSAR } from './erpEngine';
 import { downloadCsvFile } from './csvExport';
+import { tr } from '../ui/financeI18n';
 
 function getQuarterKey(dateStr) {
   const d = dateStr ? new Date(dateStr) : new Date();
@@ -76,10 +77,10 @@ export function ZatcaVatReturnView({ company, invoices, creditNotes, purchaseOrd
 
   return (
     <div className="space-y-4">
-      <div className="no-print flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-base sm:text-lg font-bold text-slate-900">ZATCA Quarterly VAT Return Worksheet • إقرار ضريبة القيمة المضافة
+      <div className="no-print flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-base sm:text-lg font-bold text-slate-900">{tr("ZATCA Quarterly VAT Return Worksheet • إقرار ضريبة القيمة المضافة")}
           </h2>
           <p className="text-xs text-slate-500">
-            Reconciles 15% Standard Output VAT, ZATCA Credit Note Adjustments, and Recoverable Input VAT for Fatoora / ZATCA filing.
+            {tr("Reconciles 15% Standard Output VAT, ZATCA Credit Note Adjustments, and Recoverable Input VAT for Fatoora / ZATCA filing.")}
           </p>
         </div>
 
@@ -89,17 +90,17 @@ export function ZatcaVatReturnView({ company, invoices, creditNotes, purchaseOrd
             onChange={(e) => setSelectedPeriod(e.target.value)}
             className="border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold bg-white"
           >
-            <option value="ALL">All Periods (Cumulative YTD)</option>
+            <option value="ALL">{tr("All Periods (Cumulative YTD)")}</option>
             {availableQuarters.map((q) => (
               <option key={q} value={q}>Tax Period: {q}</option>
             ))}
           </select>
 
-          <button onClick={() => downloadCsvFile(`ZATCA_VAT_Return_${selectedPeriod}.csv`, ['ZATCA Return Line Item', 'Taxable Amount (SAR)', 'Adjustment (SAR)', 'VAT Amount 15% (SAR)'], [['1. Standard-Rated Sales (15%)', vatSummary.grossSalesBase.toFixed(2), (-vatSummary.cnBase).toFixed(2), vatSummary.grossSalesVat.toFixed(2)], ['2. Less: ZATCA Credit Notes / Sales Returns', (-vatSummary.cnBase).toFixed(2), '0.00', (-vatSummary.cnVat).toFixed(2)], ['3. Total Output VAT Due (Net Sales VAT)', vatSummary.netSalesBase.toFixed(2), '0.00', vatSummary.netSalesVat.toFixed(2)], ['4. Standard-Rated Purchases Input VAT (15%)', vatSummary.recoverablePurchaseBase.toFixed(2), '0.00', (-vatSummary.inputVatRecoverable).toFixed(2)], ['5. NET VAT PAYABLE TO ZATCA', '', '', vatSummary.netVatPayable.toFixed(2)]])} className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold cursor-pointer">Export Excel / CSV</button>
+          <button onClick={() => downloadCsvFile(`ZATCA_VAT_Return_${selectedPeriod}.csv`, ['ZATCA Return Line Item', 'Taxable Amount (SAR)', 'Adjustment (SAR)', 'VAT Amount 15% (SAR)'], [['1. Standard-Rated Sales (15%)', vatSummary.grossSalesBase.toFixed(2), (-vatSummary.cnBase).toFixed(2), vatSummary.grossSalesVat.toFixed(2)], ['2. Less: ZATCA Credit Notes / Sales Returns', (-vatSummary.cnBase).toFixed(2), '0.00', (-vatSummary.cnVat).toFixed(2)], ['3. Total Output VAT Due (Net Sales VAT)', vatSummary.netSalesBase.toFixed(2), '0.00', vatSummary.netSalesVat.toFixed(2)], ['4. Standard-Rated Purchases Input VAT (15%)', vatSummary.recoverablePurchaseBase.toFixed(2), '0.00', (-vatSummary.inputVatRecoverable).toFixed(2)], ['5. NET VAT PAYABLE TO ZATCA', '', '', vatSummary.netVatPayable.toFixed(2)]])} className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold cursor-pointer">{tr("Export Excel / CSV")}</button>
           <button onClick={() => window.print()}
             className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-blue-600 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
           >
-            <Printer className="w-4 h-4" /> Print VAT Return
+            <Printer className="w-4 h-4" /> {tr("Print VAT Return")}
           </button>
         </div>
       </div>
@@ -108,62 +109,62 @@ export function ZatcaVatReturnView({ company, invoices, creditNotes, purchaseOrd
       <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
         <div className="bg-slate-900 text-white px-5 py-3.5 flex flex-wrap justify-between items-center gap-2 text-xs">
           <div>
-            <div className="flex items-center gap-3">{company?.logoUrl && (<img src={company.logoUrl} alt="Company Logo" className="h-9 max-w-[130px] object-contain bg-white rounded p-0.5" />)}<div><span className="font-bold">{company.nameEn}</span> • VAT TIN: <span className="font-mono">{company.vatNumber}</span>
+            <div className="flex items-center gap-3">{company?.logoUrl && (<img src={company.logoUrl} alt="Company Logo" className="h-9 max-w-[130px] object-contain bg-white rounded p-0.5" />)}<div><span className="font-bold">{company.nameEn}</span> {tr("• VAT TIN:")} <span className="font-mono">{company.vatNumber}</span>
           </div></div></div>
           <span className="px-2.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-semibold">
-            Period: {selectedPeriod === 'ALL' ? 'Cumulative All Quarters' : selectedPeriod}
+            {tr("Period:")}{" "}{selectedPeriod === 'ALL' ? 'Cumulative All Quarters' : selectedPeriod}
           </span>
         </div>
 
-        <table className="w-full text-left text-xs">
+        <table className="w-full text-start text-xs">
           <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
             <tr>
-              <th className="p-3.5">ZATCA Return Line Item</th>
-              <th className="p-3.5 text-right">Taxable Amount (SAR)</th>
-              <th className="p-3.5 text-right">Adjustment (SAR)</th>
-              <th className="p-3.5 text-right">VAT Amount 15% (SAR)</th>
+              <th className="p-3.5">{tr("ZATCA Return Line Item")}</th>
+              <th className="p-3.5 text-end">{tr("Taxable Amount (SAR)")}</th>
+              <th className="p-3.5 text-end">{tr("Adjustment (SAR)")}</th>
+              <th className="p-3.5 text-end">{tr("VAT Amount 15% (SAR)")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             <tr>
               <td className="p-3.5">
-                <div className="font-bold text-slate-900">1. Standard-Rated Sales (15%)</div>
-                <div className="text-[11px] text-slate-500">Posted ZATCA Tax Invoices ({vatSummary.invCount} invoices)</div>
+                <div className="font-bold text-slate-900">{tr("1. Standard-Rated Sales (15%)")}</div>
+                <div className="text-[11px] text-slate-500">Posted ZATCA Tax Invoices ({vatSummary.invCount}{" "}{tr("invoices)")}</div>
               </td>
-              <td className="p-3.5 text-right font-mono font-semibold">{formatSAR(vatSummary.grossSalesBase)}</td>
-              <td className="p-3.5 text-right font-mono text-rose-600">-{formatSAR(vatSummary.cnBase)}</td>
-              <td className="p-3.5 text-right font-mono font-bold text-slate-900">{formatSAR(vatSummary.grossSalesVat)}</td>
+              <td className="p-3.5 text-end font-mono font-semibold">{formatSAR(vatSummary.grossSalesBase)}</td>
+              <td className="p-3.5 text-end font-mono text-rose-600">-{formatSAR(vatSummary.cnBase)}</td>
+              <td className="p-3.5 text-end font-mono font-bold text-slate-900">{formatSAR(vatSummary.grossSalesVat)}</td>
             </tr>
             <tr>
               <td className="p-3.5">
-                <div className="font-bold text-rose-700">2. Less: ZATCA Credit Notes / Sales Returns</div>
-                <div className="text-[11px] text-slate-500">Issued e-Credit Notes ({vatSummary.cnCount} credit notes)</div>
+                <div className="font-bold text-rose-700">{tr("2. Less: ZATCA Credit Notes / Sales Returns")}</div>
+                <div className="text-[11px] text-slate-500">Issued e-Credit Notes ({vatSummary.cnCount}{" "}{tr("credit notes)")}</div>
               </td>
-              <td className="p-3.5 text-right font-mono text-rose-700">-{formatSAR(vatSummary.cnBase)}</td>
-              <td className="p-3.5 text-right font-mono">0.00</td>
-              <td className="p-3.5 text-right font-mono font-bold text-rose-700">-{formatSAR(vatSummary.cnVat)}</td>
+              <td className="p-3.5 text-end font-mono text-rose-700">-{formatSAR(vatSummary.cnBase)}</td>
+              <td className="p-3.5 text-end font-mono">0.00</td>
+              <td className="p-3.5 text-end font-mono font-bold text-rose-700">-{formatSAR(vatSummary.cnVat)}</td>
             </tr>
             <tr className="bg-blue-50/40 font-bold">
-              <td className="p-3.5 text-blue-900">3. Total Output VAT Due (Net Sales VAT)</td>
-              <td className="p-3.5 text-right font-mono text-blue-900">{formatSAR(vatSummary.netSalesBase)}</td>
-              <td className="p-3.5 text-right font-mono">—</td>
-              <td className="p-3.5 text-right font-mono text-blue-900">{formatSAR(vatSummary.netSalesVat)}</td>
+              <td className="p-3.5 text-blue-900">{tr("3. Total Output VAT Due (Net Sales VAT)")}</td>
+              <td className="p-3.5 text-end font-mono text-blue-900">{formatSAR(vatSummary.netSalesBase)}</td>
+              <td className="p-3.5 text-end font-mono">—</td>
+              <td className="p-3.5 text-end font-mono text-blue-900">{formatSAR(vatSummary.netSalesVat)}</td>
             </tr>
             <tr>
               <td className="p-3.5">
-                <div className="font-bold text-slate-900">4. Standard-Rated Domestic &amp; Customs Purchases (15%)</div>
-                <div className="text-[11px] text-slate-500">Recoverable Input VAT from Purchase Orders ({vatSummary.poCount} POs)</div>
+                <div className="font-bold text-slate-900">{tr("4. Standard-Rated Domestic & Customs Purchases (15%)")}</div>
+                <div className="text-[11px] text-slate-500">Recoverable Input VAT from Purchase Orders ({vatSummary.poCount}{" "}{tr("POs)")}</div>
               </td>
-              <td className="p-3.5 text-right font-mono font-semibold">{formatSAR(vatSummary.recoverablePurchaseBase)}</td>
-              <td className="p-3.5 text-right font-mono">0.00</td>
-              <td className="p-3.5 text-right font-mono font-bold text-emerald-700">-{formatSAR(vatSummary.inputVatRecoverable)}</td>
+              <td className="p-3.5 text-end font-mono font-semibold">{formatSAR(vatSummary.recoverablePurchaseBase)}</td>
+              <td className="p-3.5 text-end font-mono">0.00</td>
+              <td className="p-3.5 text-end font-mono font-bold text-emerald-700">-{formatSAR(vatSummary.inputVatRecoverable)}</td>
             </tr>
             <tr className="bg-slate-900 text-white text-sm">
               <td className="p-4 font-bold" colSpan={3}>
-                5. NET VAT PAYABLE TO ZATCA (OR CARRIED FORWARD IF NEGATIVE)
+                {tr("5. NET VAT PAYABLE TO ZATCA (OR CARRIED FORWARD IF NEGATIVE)")}
               </td>
-              <td className="p-4 text-right font-mono font-bold text-emerald-400">
-                SAR {formatSAR(vatSummary.netVatPayable)}
+              <td className="p-4 text-end font-mono font-bold text-emerald-400">
+                {tr("SAR")}{" "}{formatSAR(vatSummary.netVatPayable)}
               </td>
             </tr>
           </tbody>
@@ -249,10 +250,10 @@ export function DealProfitabilityView({ invoices, creditNotes, commissions, supp
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-base sm:text-lg font-bold text-slate-900">
-            Deal &amp; Sales Order Profitability P&amp;L Report
+            {tr("Deal & Sales Order Profitability P&L Report")}
           </h2>
           <p className="text-xs text-slate-500">
-            Compare net margins across MEP Contracting and IT &amp; ELV Solutions after COGS, returns, and sales profit share.
+            {tr("Compare net margins across MEP Contracting and IT & ELV Solutions after COGS, returns, and sales profit share.")}
           </p>
         </div>
 
@@ -294,20 +295,20 @@ export function DealProfitabilityView({ invoices, creditNotes, commissions, supp
       {/* Executive P&L Strip */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
         <div className="bg-white border border-slate-200 rounded-2xl p-4">
-          <div className="text-slate-500">Net Invoiced Revenue</div>
-          <div className="text-base sm:text-lg font-bold text-slate-900 mt-1">SAR {formatSAR(totals.rev)}</div>
+          <div className="text-slate-500">{tr("Net Invoiced Revenue")}</div>
+          <div className="text-base sm:text-lg font-bold text-slate-900 mt-1">{tr("SAR")}{" "}{formatSAR(totals.rev)}</div>
         </div>
         <div className="bg-white border border-slate-200 rounded-2xl p-4">
-          <div className="text-slate-500">Landed COGS</div>
-          <div className="text-base sm:text-lg font-bold text-amber-700 mt-1">SAR {formatSAR(totals.cost)}</div>
+          <div className="text-slate-500">{tr("Landed COGS")}</div>
+          <div className="text-base sm:text-lg font-bold text-amber-700 mt-1">{tr("SAR")}{" "}{formatSAR(totals.cost)}</div>
         </div>
         <div className="bg-white border border-slate-200 rounded-2xl p-4">
-          <div className="text-slate-500">Sales Profit Share</div>
-          <div className="text-base sm:text-lg font-bold text-blue-700 mt-1">SAR {formatSAR(totals.comm)}</div>
+          <div className="text-slate-500">{tr("Sales Profit Share")}</div>
+          <div className="text-base sm:text-lg font-bold text-blue-700 mt-1">{tr("SAR")}{" "}{formatSAR(totals.comm)}</div>
         </div>
         <div className="bg-white border border-slate-200 rounded-2xl p-4">
           <div className="text-slate-500">
-            {divisionFilter === 'ALL' ? 'Realized FX Diff' : 'Division Net Margin'}
+            {divisionFilter === 'ALL' ? tr('Realized FX Diff') : tr('Division Net Margin')}
           </div>
           <div className="text-base sm:text-lg font-bold text-slate-800 mt-1">
             {divisionFilter === 'ALL'
@@ -317,30 +318,30 @@ export function DealProfitabilityView({ invoices, creditNotes, commissions, supp
         </div>
         <div className="bg-emerald-900 text-white rounded-2xl p-4 col-span-2 lg:col-span-1">
           <div className="text-emerald-200 flex items-center justify-between">
-            <span>Net Profit</span>
+            <span>{tr("Net Profit")}</span>
             <span className="font-mono font-bold text-emerald-300">{totals.overallMarginPct.toFixed(1)}%</span>
           </div>
-          <div className="text-base sm:text-lg font-bold mt-1">SAR {formatSAR(totals.net)}</div>
+          <div className="text-base sm:text-lg font-bold mt-1">{tr("SAR")}{" "}{formatSAR(totals.net)}</div>
         </div>
       </div>
 
       <div className="bg-white border border-slate-200 rounded-2xl overflow-x-auto shadow-sm">
         {dealRows.length === 0 ? (
           <div className="p-10 text-center text-sm text-slate-500">
-            No posted ZATCA Invoices found for{' '}
+            {tr("No posted ZATCA Invoices found for")}{' '}
             <strong>{divisionFilter === 'ALL' ? 'any division' : divisionFilter === 'IT' ? 'IT & ELV' : 'MEP'}</strong>.
           </div>
         ) : (
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-start text-xs">
             <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
               <tr>
-                <th className="p-3">Invoice / SO &amp; Division</th>
-                <th className="p-3">Customer &amp; Salesman</th>
-                <th className="p-3 text-right">Net Revenue</th>
-                <th className="p-3 text-right">Landed COGS</th>
-                <th className="p-3 text-right">Sales Share</th>
-                <th className="p-3 text-right">Net Profit (SAR)</th>
-                <th className="p-3 text-right">Net Margin</th>
+                <th className="p-3">{tr("Invoice / SO & Division")}</th>
+                <th className="p-3">{tr("Customer & Salesman")}</th>
+                <th className="p-3 text-end">{tr("Net Revenue")}</th>
+                <th className="p-3 text-end">{tr("Landed COGS")}</th>
+                <th className="p-3 text-end">{tr("Sales Share")}</th>
+                <th className="p-3 text-end">{tr("Net Profit (SAR)")}</th>
+                <th className="p-3 text-end">{tr("Net Margin")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -363,17 +364,17 @@ export function DealProfitabilityView({ invoices, creditNotes, commissions, supp
                     <div className="font-bold text-slate-900">{r.clientName}</div>
                     <div className="text-[11px] text-slate-500">{r.salesman}</div>
                   </td>
-                  <td className="p-3 text-right font-semibold">SAR {formatSAR(r.netRevenueSar)}</td>
-                  <td className="p-3 text-right text-slate-600">SAR {formatSAR(r.netCostSar)}</td>
-                  <td className="p-3 text-right text-blue-700">SAR {formatSAR(r.commissionSar)}</td>
+                  <td className="p-3 text-end font-semibold">{tr("SAR")}{" "}{formatSAR(r.netRevenueSar)}</td>
+                  <td className="p-3 text-end text-slate-600">{tr("SAR")}{" "}{formatSAR(r.netCostSar)}</td>
+                  <td className="p-3 text-end text-blue-700">{tr("SAR")}{" "}{formatSAR(r.commissionSar)}</td>
                   <td
-                    className={`p-3 text-right font-bold ${
+                    className={`p-3 text-end font-bold ${
                       r.netProfitAfterCommSar >= 0 ? 'text-emerald-700' : 'text-rose-600'
                     }`}
                   >
                     SAR {formatSAR(r.netProfitAfterCommSar)}
                   </td>
-                  <td className="p-3 text-right">
+                  <td className="p-3 text-end">
                     <span
                       className={`px-2 py-0.5 rounded font-bold text-[11px] ${
                         r.marginPct >= 15

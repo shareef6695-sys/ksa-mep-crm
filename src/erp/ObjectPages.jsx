@@ -18,6 +18,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { formatSAR } from './erpEngine';
+import { zatcaStatus } from '../lib/zatca';
 
 /* ================================================================== */
 /* Labels (EN / AR)                                                    */
@@ -686,24 +687,35 @@ export function InvoiceObjectPage({
   onRecordPayment,
   onPrint,
   onOpenSalesOrder,
+  canViewCost = true,
+  receiptAllocations = [],
 }) {
   const t = tr(lang);
   const inv = invoice || {};
 
   const model = useMemo(() => {
     const items = arr(inv.items);
-    const invReceipts = arr(receipts).filter((r) => r && r.invoice_id === inv.id);
+    // 0006: one receipt can pay several invoices, so money applied to THIS invoice comes from receipt_allocations
+    const invAllocs = arr(receiptAllocations).filter((a) => a && a.invoice_id === inv.id);
+    const receiptById = Object.fromEntries(arr(receipts).filter(Boolean).map((r) => [r.id, r]));
+    const invReceipts = invAllocs.length > 0
+      ? invAllocs.filter((a) => a.receipt_id && receiptById[a.receipt_id]).map((a) => ({ ...receiptById[a.receipt_id], amount_sar: a.amount_sar }))
+      : arr(receipts).filter((r) => r && r.invoice_id === inv.id);
     const invCNs = arr(creditNotes).filter((c) => c && c.original_invoice_id === inv.id);
     const grand = num(inv.grand_total_sar);
     const paid = num(inv.paid_amount_sar);
-    const open = Math.max(0, grand - paid);
+    const credited = num(inv.credited_amount_sar);
+    const debited = num(inv.debited_amount_sar); // debit notes (0010)
+    const open = Math.max(0, grand + debited - paid - credited);
     const subtotal = num(inv.subtotal_sar);
     const cost = num(inv.landed_cost_sar) || items.reduce((s, it) => s + itemQty(it) * num(it.unitCostSar), 0);
     const marginPct = subtotal > 0 ? ((subtotal - cost) / subtotal) * 100 : 0;
     const age = daysSince(inv.issued_at || inv.created_at);
 
-    // credit notes reduce grand_total_sar on the invoice, so the original gross = current + credit notes
+    // Invoices keep their issued total (0006). Before 0006, credit notes reduced grand_total_sar instead,
+    // so for those older invoices (no credited amount recorded) the issued gross = current + credit notes.
     const cnTotal = invCNs.reduce((s, c) => s + num(c.grand_total_sar), 0);
+    const issued = credited > 0 || invCNs.length === 0 ? grand : grand + cnTotal;
     const events = [
       ...invCNs.map((c) => ({ type: 'cn', date: c.issued_at, number: c.credit_note_number, detail: c.reason, amount: num(c.grand_total_sar) })),
       ...invReceipts.map((r) => ({
@@ -713,9 +725,16 @@ export function InvoiceObjectPage({
         detail: [r.payment_method, r.reference_no].filter(Boolean).join(' • '),
         amount: num(r.amount_sar),
       })),
+      ...invAllocs.filter((a) => !a.receipt_id).map((a) => ({
+        type: 'rcp',
+        date: a.created_at || a.entry_date,
+        number: a.source_doc,
+        detail: a.source === 'credit_note_release' ? 'Released to customer credit' : 'Customer credit applied',
+        amount: num(a.amount_sar),
+      })),
     ].sort((a, b) => dateKey(a.date) - dateKey(b.date));
-    let running = grand + cnTotal;
-    const ledger = [{ type: 'inv', date: inv.issued_at, number: inv.invoice_number, detail: '', amount: grand + cnTotal, balance: running }];
+    let running = issued;
+    const ledger = [{ type: 'inv', date: inv.issued_at, number: inv.invoice_number, detail: '', amount: issued, balance: running }];
     events.forEach((e) => {
       running -= e.amount;
       ledger.push({ ...e, balance: running });
@@ -730,7 +749,7 @@ export function InvoiceObjectPage({
     const so = arr(salesOrders).find((s) => s && (s.id === inv.so_id || (inv.so_number && s.so_number === inv.so_number))) || null;
     const dn = arr(deliveryNotes).find((d) => d && d.id === inv.dn_id) || null;
     return { items, invReceipts, invCNs, grand, paid, open, subtotal, cost, marginPct, age, ledger, journals, commission, so, dn };
-  }, [inv, receipts, creditNotes, glEntries, commissions, salesOrders, deliveryNotes]);
+  }, [inv, receipts, creditNotes, glEntries, commissions, salesOrders, deliveryNotes, receiptAllocations]);
 
   const payState =
     inv.payment_status === 'paid' ? 'positive' : inv.payment_status === 'partial' ? 'critical' : model.age > 30 ? 'negative' : 'information';
@@ -752,8 +771,8 @@ export function InvoiceObjectPage({
               <th className={thNum}>{t.qty}</th>
               <th className={thNum}>{t.unitPrice}</th>
               <th className={thNum}>{t.lineTotal}</th>
-              <th className={thNum}>{t.cost}</th>
-              <th className={thNum}>{t.margin}</th>
+              {canViewCost && <th className={thNum}>{t.cost}</th>}
+              {canViewCost && <th className={thNum}>{t.margin}</th>}
             </tr>
           }
           foot={
@@ -761,18 +780,18 @@ export function InvoiceObjectPage({
               <tr>
                 <td className="p-3" colSpan={3}>{t.subtotal}</td>
                 <td className={tdNum}>{sar(model.subtotal)}</td>
-                <td className={tdNum}>{sar(model.cost)}</td>
-                <td className={tdNum}>{pct(model.marginPct)}</td>
+                {canViewCost && <td className={tdNum}>{sar(model.cost)}</td>}
+                {canViewCost && <td className={tdNum}>{pct(model.marginPct)}</td>}
               </tr>
               <tr>
                 <td className="p-3" colSpan={3}>{t.vat}</td>
                 <td className={tdNum}>{sar(inv.vat_sar)}</td>
-                <td colSpan={2} />
+                {canViewCost && <td colSpan={2} />}
               </tr>
               <tr>
                 <td className="p-3" colSpan={3}>{t.grandTotal}</td>
                 <td className={tdNum}>{sar(model.grand)}</td>
-                <td colSpan={2} />
+                {canViewCost && <td colSpan={2} />}
               </tr>
             </>
           }
@@ -791,8 +810,8 @@ export function InvoiceObjectPage({
                 <td className={tdNum}>{q}</td>
                 <td className={tdNum}>{sar(it.unitSellSar)}</td>
                 <td className={`${tdNum} font-bold`}>{sar(line)}</td>
-                <td className={tdNum}>{sar(cost)}</td>
-                <td className={`${tdNum} ${m < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>{pct(m)}</td>
+                {canViewCost && <td className={tdNum}>{sar(cost)}</td>}
+                {canViewCost && <td className={`${tdNum} ${m < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>{pct(m)}</td>}
               </tr>
             );
           })}
@@ -852,7 +871,7 @@ export function InvoiceObjectPage({
             rows={[
               [t.salesman, c.salesman_name],
               [t.rate, pct(c.commission_pct)],
-              [t.netProfit, `SAR ${sar(c.net_profit_sar)}`],
+              ...(canViewCost ? [[t.netProfit, `SAR ${sar(c.net_profit_sar)}`]] : []),
               [t.eligible, `SAR ${sar(c.total_eligible_commission_sar)}`],
               [t.unlocked, `SAR ${sar(c.unlocked_commission_sar)}`],
               [t.paidOut, `SAR ${sar(c.paid_out_sar)}`],
@@ -939,15 +958,26 @@ export function InvoiceObjectPage({
       subtitle={[inv.client_name, inv.client_vat ? `${t.vatNo}: ${inv.client_vat}` : ''].filter(Boolean).join(' • ')}
       statuses={[
         <ObjectStatus key="pay" state={payState}>{payLabel}</ObjectStatus>,
-        <ObjectStatus key="zatca" state={inv.zatca_status === 'cleared' ? 'positive' : 'information'}>{statusText(t, inv.zatca_status)}</ObjectStatus>,
+        <ObjectStatus key="zatca" state={({ neutral: 'information' })[zatcaStatus(inv, lang).tone] || zatcaStatus(inv, lang).tone}>{`ZATCA: ${zatcaStatus(inv, lang).label}`}</ObjectStatus>,
+        inv.zatca_uuid && <ObjectStatus key="uuid" state="neutral">{`UUID ${String(inv.zatca_uuid).slice(0, 8)}…`}</ObjectStatus>,
         inv.invoice_type && <ObjectStatus key="type" state="neutral">{statusText(t, inv.invoice_type)}</ObjectStatus>,
+        (inv.zatca_messages || []).length > 0 && (
+          <span key="zm" title={inv.zatca_messages.map((m) => `${m.code || ''} ${m.message || ''}`).join('\n')} className="cursor-help">
+            <ObjectStatus state={inv.zatca_status === 'rejected' ? 'negative' : 'critical'}>{`ZATCA ${inv.zatca_status === 'rejected' ? 'errors' : 'messages'}: ${inv.zatca_messages.length}`}</ObjectStatus>
+          </span>
+        ),
+        (inv.zatca_warnings || []).length > 0 && (
+          <span key="zw" title={inv.zatca_warnings.join('\n')} className="cursor-help">
+            <ObjectStatus state="critical">{`⚠ ZATCA: ${inv.zatca_warnings.join(' • ')}`}</ObjectStatus>
+          </span>
+        ),
         inv.division && <ObjectStatus key="div" state="information">{`${t.division}: ${inv.division}`}</ObjectStatus>,
       ].filter(Boolean)}
       facets={[
         <Facet key="g" label={t.grandTotal} value={`SAR ${sar(model.grand)}`} sub={fmtDate(inv.issued_at, lang)} />,
         <Facet key="p" label={t.paid} value={`SAR ${sar(model.paid)}`} state="positive" />,
         <Facet key="o" label={t.openBalance} value={`SAR ${sar(model.open)}`} state={model.open > 0.009 ? (model.age > 30 ? 'negative' : 'critical') : 'positive'} />,
-        <Facet key="m" label={t.grossMargin} value={pct(model.marginPct)} state={model.marginPct < 0 ? 'negative' : undefined} />,
+        canViewCost && <Facet key="m" label={t.grossMargin} value={pct(model.marginPct)} state={model.marginPct < 0 ? 'negative' : undefined} />,
         <Facet key="a" label={t.age} value={`${model.age} ${t.days}`} state={model.open > 0.009 && model.age > 30 ? 'negative' : undefined} />,
       ]}
       actions={actions}
@@ -978,6 +1008,7 @@ export function SalesOrderObjectPage({
   onDeliver,
   onOpenInvoice,
   onOpenPurchaseOrder,
+  canViewCost = true,
 }) {
   const t = tr(lang);
   const order = so || {};
@@ -1253,17 +1284,17 @@ export function SalesOrderObjectPage({
         <Facet key="d" label={t.deliveredPct} value={pct(model.deliveredPct)} state={model.fullyDelivered ? 'positive' : model.delivered > 0 ? 'critical' : undefined} />,
         <Facet key="i" label={t.invoiced} value={`SAR ${sar(model.invoiced)}`} />,
         <Facet key="c" label={t.collected} value={`SAR ${sar(model.collected)}`} state="positive" />,
-        <Facet key="m" label={t.estMargin} value={pct(model.estMarginPct)} sub={`SAR ${sar(model.estMargin)}`} state={model.estMargin < 0 ? 'negative' : undefined} />,
+        canViewCost && <Facet key="m" label={t.estMargin} value={pct(model.estMarginPct)} sub={`SAR ${sar(model.estMargin)}`} state={model.estMargin < 0 ? 'negative' : undefined} />,
       ]}
       actions={actions}
       tabs={[
         { id: 'items', label: t.items, count: model.items.length, content: itemsTab },
         { id: 'deliveries', label: t.deliveries, count: model.dns.length, content: deliveriesTab },
         { id: 'invoices', label: t.invoices, count: model.invs.length, content: invoicesTab },
-        { id: 'purchasing', label: t.purchasingTab, count: model.pos.length, content: purchasingTab },
-        { id: 'profit', label: t.profitability, content: profitTab },
+        canViewCost && { id: 'purchasing', label: t.purchasingTab, count: model.pos.length, content: purchasingTab },
+        canViewCost && { id: 'profit', label: t.profitability, content: profitTab },
         { id: 'flow', label: t.docFlow, content: <DocumentFlow lang={lang} nodes={flowNodes} /> },
-      ]}
+      ].filter(Boolean)}
     />
   );
 }
@@ -1326,7 +1357,9 @@ export function PurchaseOrderObjectPage({
     const openSar = openFx * fx;
     const fxVariance = pays.reduce((s, p) => s + num(p.fx_variance_sar), 0);
     const isPaid = order.payment_status === 'paid' || order.status === 'paid' || order.bill_status === 'paid';
-    const stageIndex = isPaid ? 3 : Math.max(0, PO_STAGES.indexOf(order.status));
+    // 0012: partial statuses sit on the stage they have reached
+    const stageOf = { pending_approval: 0, po_issued: 0, partially_received: 0, grn_completed: 1, partially_billed: 1, billed: 2, closed: 2, paid: 3 };
+    const stageIndex = isPaid ? 3 : (stageOf[order.status] ?? Math.max(0, PO_STAGES.indexOf(order.status)));
     const billNumber = order.bill_number || (stageIndex >= 2 ? `BILL-${order.po_number}` : '');
     const journals = relatedJournals(glEntries, [billNumber, `BILL-${order.po_number}`, order.po_number, ...pays.map((p) => p.voucher_number)]);
     const supplierName = String(order.supplier_name || '').trim().toLowerCase();
@@ -1338,7 +1371,7 @@ export function PurchaseOrderObjectPage({
   const cur = order.currency || 'SAR';
   const statusKey = model.isPaid ? 'paid' : order.status;
   const poState = model.isPaid ? 'positive' : order.status === 'billed' ? 'critical' : 'information';
-  const canPay = onPay && !model.isPaid && (order.status === 'billed' || order.bill_status === 'posted');
+  const canPay = onPay && !model.isPaid && (['billed', 'partially_billed', 'closed'].includes(order.status) || ['posted', 'partial'].includes(order.bill_status));
 
   const itemsTab = (
     <Section title={t.items} icon={FileText}>

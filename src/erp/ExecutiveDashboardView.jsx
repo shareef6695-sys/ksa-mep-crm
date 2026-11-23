@@ -12,7 +12,7 @@ import {
   Scale,
   Plus,
 } from 'lucide-react';
-import { formatSAR } from './erpEngine';
+import { formatSAR, invoiceOpenSar } from './erpEngine';
 
 function getDaysOld(dateStr) {
   if (!dateStr) return 0;
@@ -50,10 +50,21 @@ export function ExecutiveDashboardView({
       0
     );
     const netCogsSar = Math.max(0, grossCogsSar - cnCostReversed);
-    const totalCommSar = commissions.reduce(
-      (s, c) => s + Number(c.total_eligible_commission_sar || 0),
-      0
+    // Commission expense: from the GL (5140, plus legacy 5280) once 0007 posts it there, so the dashboard
+    // matches the P&L; before any GL postings exist, fall back to the commission ledger.
+    let glCommSar = 0;
+    let glHasCommission = false;
+    glEntries.forEach((entry) =>
+      (entry.lines || []).forEach((l) => {
+        if (['5140', '5280'].includes(String(l.account_code))) {
+          glHasCommission = true;
+          glCommSar += Number(l.debit || 0) - Number(l.credit || 0);
+        }
+      })
     );
+    const totalCommSar = glHasCommission
+      ? glCommSar
+      : commissions.reduce((s, c) => s + Number(c.total_eligible_commission_sar || 0), 0);
     const realizedFxDiffSar = supplierPayments.reduce(
       (s, p) => s + Number(p.fx_variance_sar || 0),
       0
@@ -74,7 +85,7 @@ export function ExecutiveDashboardView({
           glCashCr += cr;
         }
         // Operating expenses 51xx–59xx (salaries, rent, depreciation, ...). COGS (50xx), FX (5130)
-        // and commissions (5140/5280) are excluded because they are subtracted separately above.
+        // and commissions (5140/5280, taken from the GL above) are excluded so they are counted once.
         if (code.startsWith('5') && !code.startsWith('50') && !['5130', '5140', '5280'].includes(code)) {
           glOpexSar += dr - cr;
         }
@@ -133,7 +144,7 @@ export function ExecutiveDashboardView({
     // 6. AR & AP Aging Buckets
     const arBuckets = { '0-30': 0, '31-60': 0, '61-90': 0, '90+': 0, total: 0 };
     invoices.forEach((inv) => {
-      const open = Math.max(0, Number(inv.grand_total_sar || 0) - Number(inv.paid_amount_sar || 0));
+      const open = Math.max(0, invoiceOpenSar(inv));
       if (open <= 0.01) return;
       const d = getDaysOld(inv.issued_at || inv.created_at);
       const b = d <= 30 ? '0-30' : d <= 60 ? '31-60' : d <= 90 ? '61-90' : '90+';

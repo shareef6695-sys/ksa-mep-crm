@@ -1,7 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { BookOpen, Plus, Trash2, CheckCircle2, AlertTriangle, X, Scale } from 'lucide-react';
 import { formatSAR } from './erpEngine';
 import { downloadCsvFile } from './csvExport';
+import { tr } from '../ui/financeI18n';
 
 export function GeneralLedgerView({
   supabase,
@@ -68,32 +69,26 @@ export function GeneralLedgerView({
     setSaving(true);
 
     try {
-      const { data: jvNum } = await supabase.rpc('next_doc_number', { p_doc_type: 'JOURNAL' });
-      const cleanLines = jvForm.lines
+      // Balanced, known, active accounts only; the database posts lines + header in one step (0004_posting.sql)
+      const lines = jvForm.lines
         .filter((l) => (parseFloat(l.debit) || 0) > 0 || (parseFloat(l.credit) || 0) > 0)
-        .map((l) => {
-          const acc = glAccounts.find((a) => a.account_code === l.account_code);
-          return {
-            account_code: l.account_code,
-            account_name: acc ? `${acc.account_code} - ${acc.account_name_en}` : l.account_code,
-            debit: Number((parseFloat(l.debit) || 0).toFixed(2)),
-            credit: Number((parseFloat(l.credit) || 0).toFixed(2)),
-            memo: l.memo || '',
-          };
-        });
-
-      await supabase.from('gl_journal_entries').insert({
-        id: `jv-${Date.now()}`,
-        voucher_number: jvNum,
-        entry_date: jvForm.entry_date,
-        reference: jvForm.reference,
-        description: jvForm.description,
-        lines: cleanLines,
-        total_debit_sar: jvTotals.dr,
-        total_credit_sar: jvTotals.cr,
-        status: 'posted',
-        posted_by: profile?.full_name || 'Accountant',
+        .map((l) => ({
+          account_code: l.account_code,
+          debit: Number((parseFloat(l.debit) || 0).toFixed(2)),
+          credit: Number((parseFloat(l.credit) || 0).toFixed(2)),
+          memo: l.memo || '',
+        }));
+      const { error: jvErr } = await supabase.rpc('post_journal', {
+        p_kind: 'MANUAL',
+        p_entry_date: jvForm.entry_date,
+        p_description: jvForm.description,
+        p_lines: lines,
+        p_reference: jvForm.reference,
       });
+      if (jvErr) {
+        window.alert(`Journal could not be posted: ${jvErr.message}`);
+        return;
+      }
 
       setShowJvModal(false);
       setJvForm({
@@ -141,14 +136,30 @@ export function GeneralLedgerView({
     }
   };
 
+  // Trial balance totals from the database over every journal line (0008); browser sum as fallback
+  const [serverActivity, setServerActivity] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    if (tab !== 'trial' || !supabase) return undefined;
+    supabase.rpc('gl_account_activity', { p_from: null, p_to: null }).then(({ data, error }) => {
+      if (alive) setServerActivity(!error && Array.isArray(data) ? data : null);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [supabase, tab, glEntries.length]);
+
   // Compute Trial Balance across all posted GL Journal Vouchers
   const trialBalance = useMemo(() => {
     const map = {};
     glAccounts.forEach((a) => {
       map[a.account_code] = { ...a, totalDr: 0, totalCr: 0 };
     });
+    (serverActivity || []).forEach((r) => {
+      map[r.account_code] = { ...(map[r.account_code] || r), totalDr: Number(r.cum_dr) || 0, totalCr: Number(r.cum_cr) || 0 };
+    });
 
-    glEntries.forEach((entry) => {
+    (serverActivity ? [] : glEntries).forEach((entry) => {
       (entry.lines || []).forEach((l) => {
         if (!map[l.account_code]) {
           map[l.account_code] = {
@@ -167,16 +178,16 @@ export function GeneralLedgerView({
     const rows = Object.values(map).sort((a, b) => a.account_code.localeCompare(b.account_code));
     const grandDr = rows.reduce((s, r) => s + r.totalDr, 0);
     const grandCr = rows.reduce((s, r) => s + r.totalCr, 0);
-    return { rows, grandDr, grandCr };
-  }, [glAccounts, glEntries]);
+    return { rows, grandDr, grandCr, fromDatabase: !!serverActivity };
+  }, [glAccounts, glEntries, serverActivity]);
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-base sm:text-lg font-bold text-slate-900">General Ledger, Chart of Accounts &amp; Manual Journal Vouchers</h2>
+          <h2 className="text-base sm:text-lg font-bold text-slate-900">{tr("General Ledger, Chart of Accounts & Manual Journal Vouchers")}</h2>
           <p className="text-xs text-slate-500">
-            Create custom GL accounts and post balanced double-entry Journal Vouchers (Opening Balances, Salaries, Rent, Bank Fees, VAT Remittance).
+            {tr("Create custom GL accounts and post balanced double-entry Journal Vouchers (Opening Balances, Salaries, Rent, Bank Fees, VAT Remittance).")}
           </p>
         </div>
 
@@ -185,13 +196,13 @@ export function GeneralLedgerView({
             onClick={() => setShowCoaModal(true)}
             className="px-3.5 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
           >
-            <Plus className="w-4 h-4" /> New GL Account
+            <Plus className="w-4 h-4" /> {tr("New GL Account")}
           </button>
           <button
             onClick={() => setShowJvModal(true)}
             className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
           >
-            <Plus className="w-4 h-4" /> Post Manual Journal (JV)
+            <Plus className="w-4 h-4" /> {tr("Post Manual Journal (JV)")}
           </button>
         </div>
       </div>
@@ -229,7 +240,7 @@ export function GeneralLedgerView({
         <div className="space-y-3">
           {glEntries.length === 0 ? (
             <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-slate-500">
-              No Manual Journal Vouchers posted yet. Click <strong>Post Manual Journal (JV)</strong> to enter opening balances or operating expenses.
+              {tr("No Manual Journal Vouchers posted yet. Click")} <strong>{tr("Post Manual Journal (JV)")}</strong> {tr("to enter opening balances or operating expenses.")}
             </div>
           ) : (
             glEntries.map((jv) => (
@@ -241,23 +252,23 @@ export function GeneralLedgerView({
                         {jv.voucher_number}
                       </span>
                       <span className="text-xs font-semibold text-slate-500">{jv.entry_date}</span>
-                      {jv.reference && <span className="text-xs bg-slate-100 px-2 py-0.5 rounded">Ref: {jv.reference}</span>}
+                      {jv.reference && <span className="text-xs bg-slate-100 px-2 py-0.5 rounded">{tr("Ref:")}{" "}{jv.reference}</span>}
                     </div>
                     <h3 className="text-sm font-bold text-slate-900 mt-1">{jv.description}</h3>
                   </div>
-                  <div className="text-right text-xs">
-                    <div className="text-slate-400">Posted by {jv.posted_by}</div>
-                    <div className="font-bold text-emerald-700">Balanced: SAR {formatSAR(jv.total_debit_sar)}</div>
+                  <div className="text-end text-xs">
+                    <div className="text-slate-400">{tr("Posted by")}{" "}{jv.posted_by}</div>
+                    <div className="font-bold text-emerald-700">{tr("Balanced: SAR")}{" "}{formatSAR(jv.total_debit_sar)}</div>
                   </div>
                 </div>
 
                 <table className="w-full text-xs">
                   <thead className="text-slate-400 border-b border-slate-100">
                     <tr>
-                      <th className="py-1 text-left">Account</th>
-                      <th className="py-1 text-left">Line Memo</th>
-                      <th className="py-1 text-right">Debit (SAR)</th>
-                      <th className="py-1 text-right">Credit (SAR)</th>
+                      <th className="py-1 text-start">{tr("Account")}</th>
+                      <th className="py-1 text-start">{tr("Line Memo")}</th>
+                      <th className="py-1 text-end">{tr("Debit (SAR)")}</th>
+                      <th className="py-1 text-end">{tr("Credit (SAR)")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
@@ -265,8 +276,8 @@ export function GeneralLedgerView({
                       <tr key={idx}>
                         <td className="py-1.5 font-semibold text-slate-800">{l.account_name}</td>
                         <td className="py-1.5 text-slate-500">{l.memo || '—'}</td>
-                        <td className="py-1.5 text-right font-mono">{Number(l.debit) > 0 ? formatSAR(l.debit) : '—'}</td>
-                        <td className="py-1.5 text-right font-mono">{Number(l.credit) > 0 ? formatSAR(l.credit) : '—'}</td>
+                        <td className="py-1.5 text-end font-mono">{Number(l.debit) > 0 ? formatSAR(l.debit) : '—'}</td>
+                        <td className="py-1.5 text-end font-mono">{Number(l.credit) > 0 ? formatSAR(l.credit) : '—'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -280,14 +291,14 @@ export function GeneralLedgerView({
       {/* TAB 2: CHART OF ACCOUNTS */}
       {tab === 'coa' && (
         <div className="bg-white border border-slate-200 rounded-2xl overflow-x-auto shadow-sm">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-start text-xs">
             <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
               <tr>
-                <th className="p-3">Code</th>
-                <th className="p-3">Account Name (English)</th>
-                <th className="p-3">Account Name (Arabic)</th>
-                <th className="p-3">Category</th>
-                <th className="p-3">Normal Balance</th>
+                <th className="p-3">{tr("Code")}</th>
+                <th className="p-3">{tr("Account Name (English)")}</th>
+                <th className="p-3">{tr("Account Name (Arabic)")}</th>
+                <th className="p-3">{tr("Category")}</th>
+                <th className="p-3">{tr("Normal Balance")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -311,18 +322,18 @@ export function GeneralLedgerView({
       {tab === 'trial' && (
         <div className="space-y-3">
           <div className="flex justify-end">
-            <button onClick={() => downloadCsvFile(`Trial_Balance_${new Date().toISOString().slice(0, 10)}.csv`, ['Account Code', 'Account Name', 'Type', 'Total Debit (SAR)', 'Total Credit (SAR)', 'Net Balance (SAR)'], [...trialBalance.rows.map((r) => [r.account_code, r.account_name_en, r.account_type, r.totalDr.toFixed(2), r.totalCr.toFixed(2), (r.totalDr - r.totalCr).toFixed(2)]), ['', 'TRIAL BALANCE TOTALS', '', trialBalance.grandDr.toFixed(2), trialBalance.grandCr.toFixed(2), (trialBalance.grandDr - trialBalance.grandCr).toFixed(2)]])} className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold cursor-pointer">Export Trial Balance (Excel / CSV)</button>
+            <button onClick={() => downloadCsvFile(`Trial_Balance_${new Date().toISOString().slice(0, 10)}.csv`, ['Account Code', 'Account Name', 'Type', 'Total Debit (SAR)', 'Total Credit (SAR)', 'Net Balance (SAR)'], [...trialBalance.rows.map((r) => [r.account_code, r.account_name_en, r.account_type, r.totalDr.toFixed(2), r.totalCr.toFixed(2), (r.totalDr - r.totalCr).toFixed(2)]), ['', 'TRIAL BALANCE TOTALS', '', trialBalance.grandDr.toFixed(2), trialBalance.grandCr.toFixed(2), (trialBalance.grandDr - trialBalance.grandCr).toFixed(2)]])} className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold cursor-pointer">{tr("Export Trial Balance (Excel / CSV)")}</button>
           </div>
         <div className="bg-white border border-slate-200 rounded-2xl overflow-x-auto shadow-sm">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-start text-xs">
             <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
               <tr>
-                <th className="p-3">Code</th>
-                <th className="p-3">GL Account</th>
-                <th className="p-3">Type</th>
-                <th className="p-3 text-right">Total Debit (SAR)</th>
-                <th className="p-3 text-right">Total Credit (SAR)</th>
-                <th className="p-3 text-right">Net Balance (SAR)</th>
+                <th className="p-3">{tr("Code")}</th>
+                <th className="p-3">{tr("GL Account")}</th>
+                <th className="p-3">{tr("Type")}</th>
+                <th className="p-3 text-end">{tr("Total Debit (SAR)")}</th>
+                <th className="p-3 text-end">{tr("Total Credit (SAR)")}</th>
+                <th className="p-3 text-end">{tr("Net Balance (SAR)")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -333,19 +344,19 @@ export function GeneralLedgerView({
                     <td className="p-3 font-mono font-bold text-blue-700">{r.account_code}</td>
                     <td className="p-3 font-semibold text-slate-900">{r.account_name_en}</td>
                     <td className="p-3 text-slate-500">{r.account_type}</td>
-                    <td className="p-3 text-right font-mono">{formatSAR(r.totalDr)}</td>
-                    <td className="p-3 text-right font-mono">{formatSAR(r.totalCr)}</td>
-                    <td className="p-3 text-right font-mono font-bold">
+                    <td className="p-3 text-end font-mono">{formatSAR(r.totalDr)}</td>
+                    <td className="p-3 text-end font-mono">{formatSAR(r.totalCr)}</td>
+                    <td className="p-3 text-end font-mono font-bold">
                       {net >= 0 ? `Dr ${formatSAR(net)}` : `Cr ${formatSAR(Math.abs(net))}`}
                     </td>
                   </tr>
                 );
               })}
               <tr className="bg-slate-900 text-white font-bold">
-                <td className="p-3" colSpan={3}>TRIAL BALANCE TOTALS</td>
-                <td className="p-3 text-right font-mono">SAR {formatSAR(trialBalance.grandDr)}</td>
-                <td className="p-3 text-right font-mono">SAR {formatSAR(trialBalance.grandCr)}</td>
-                <td className="p-3 text-right text-emerald-400">
+                <td className="p-3" colSpan={3}>{tr("TRIAL BALANCE TOTALS")}</td>
+                <td className="p-3 text-end font-mono">{tr("SAR")}{" "}{formatSAR(trialBalance.grandDr)}</td>
+                <td className="p-3 text-end font-mono">{tr("SAR")}{" "}{formatSAR(trialBalance.grandCr)}</td>
+                <td className="p-3 text-end text-emerald-400">
                   {Math.abs(trialBalance.grandDr - trialBalance.grandCr) < 0.01 ? 'IN BALANCE' : 'OUT OF BALANCE'}
                 </td>
               </tr>
@@ -360,14 +371,14 @@ export function GeneralLedgerView({
         <div className="fixed inset-0 bg-slate-950/70 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4">
             <div className="flex items-center justify-between border-b pb-3">
-              <h3 className="font-bold text-base">Create Custom GL Account</h3>
+              <h3 className="font-bold text-base">{tr("Create Custom GL Account")}</h3>
               <button onClick={() => setShowCoaModal(false)}><X className="w-5 h-5" /></button>
             </div>
 
             <form onSubmit={handleCreateAccount} className="space-y-3 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Account Code *</label>
+                  <label className="block font-semibold text-slate-700 mb-1">{tr("Account Code *")}</label>
                   <input
                     type="text"
                     required
@@ -378,17 +389,17 @@ export function GeneralLedgerView({
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Account Category *</label>
+                  <label className="block font-semibold text-slate-700 mb-1">{tr("Account Category *")}</label>
                   <select
                     value={coaForm.account_type}
                     onChange={(e) => setCoaForm({ ...coaForm, account_type: e.target.value })}
                     className="w-full border border-slate-300 rounded-xl px-3 py-2.5 bg-white font-semibold"
                   >
-                    <option value="Asset">Asset (1xxx)</option>
-                    <option value="Liability">Liability (2xxx)</option>
-                    <option value="Equity">Equity (3xxx)</option>
-                    <option value="Revenue">Revenue (4xxx)</option>
-                    <option value="Expense">Expense (5xxx)</option>
+                    <option value="Asset">{tr("Asset (1xxx)")}</option>
+                    <option value="Liability">{tr("Liability (2xxx)")}</option>
+                    <option value="Equity">{tr("Equity (3xxx)")}</option>
+                    <option value="Revenue">{tr("Revenue (4xxx)")}</option>
+                    <option value="Expense">{tr("Expense (5xxx)")}</option>
                   </select>
                 </div>
               </div>
@@ -396,14 +407,14 @@ export function GeneralLedgerView({
               <input
                 type="text"
                 required
-                placeholder="Account Name (English) * e.g. Marketing & Exhibitions"
+                placeholder={tr("Account Name (English) * e.g. Marketing & Exhibitions")}
                 value={coaForm.account_name_en}
                 onChange={(e) => setCoaForm({ ...coaForm, account_name_en: e.target.value })}
                 className="w-full border border-slate-300 rounded-xl px-3 py-2.5"
               />
               <input
                 type="text"
-                placeholder="Account Name (Arabic) e.g. مصاريف التسويق والمعارض"
+                placeholder={tr("Account Name (Arabic) e.g. مصاريف التسويق والمعارض")}
                 value={coaForm.account_name_ar}
                 onChange={(e) => setCoaForm({ ...coaForm, account_name_ar: e.target.value })}
                 className="w-full border border-slate-300 rounded-xl px-3 py-2.5"
@@ -414,7 +425,7 @@ export function GeneralLedgerView({
                 disabled={saving}
                 className="w-full py-3 rounded-xl bg-blue-600 text-white font-semibold cursor-pointer"
               >
-                {saving ? 'Saving Account...' : 'Add to Chart of Accounts'}
+                {saving ? tr('Saving Account...') : tr('Add to Chart of Accounts')}
               </button>
             </form>
           </div>
@@ -427,7 +438,7 @@ export function GeneralLedgerView({
           <div className="bg-white rounded-2xl max-w-3xl w-full p-6 space-y-4 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b pb-3">
               <h3 className="font-bold text-base flex items-center gap-2">
-                <Scale className="w-4 h-4 text-blue-600" /> Post Manual Journal Voucher (Double-Entry)
+                <Scale className="w-4 h-4 text-blue-600" /> {tr("Post Manual Journal Voucher (Double-Entry)")}
               </h3>
               <button onClick={() => setShowJvModal(false)}><X className="w-5 h-5" /></button>
             </div>
@@ -435,7 +446,7 @@ export function GeneralLedgerView({
             <form onSubmit={handlePostJournal} className="space-y-3 text-xs">
               <div className="grid sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Posting Date *</label>
+                  <label className="block font-semibold text-slate-700 mb-1">{tr("Posting Date *")}</label>
                   <input
                     type="date"
                     required
@@ -445,21 +456,21 @@ export function GeneralLedgerView({
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Reference / Doc #</label>
+                  <label className="block font-semibold text-slate-700 mb-1">{tr("Reference / Doc #")}</label>
                   <input
                     type="text"
-                    placeholder="e.g. SADAD-VAT-Q3 / PAYROLL-NOV"
+                    placeholder={tr("e.g. SADAD-VAT-Q3 / PAYROLL-NOV")}
                     value={jvForm.reference}
                     onChange={(e) => setJvForm({ ...jvForm, reference: e.target.value })}
                     className="w-full border border-slate-300 rounded-xl px-3 py-2"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Narration / Description *</label>
+                  <label className="block font-semibold text-slate-700 mb-1">{tr("Narration / Description *")}</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Nov 2026 Staff Salaries & GOSI"
+                    placeholder={tr("e.g. Nov 2026 Staff Salaries & GOSI")}
                     value={jvForm.description}
                     onChange={(e) => setJvForm({ ...jvForm, description: e.target.value })}
                     className="w-full border border-slate-300 rounded-xl px-3 py-2"
@@ -469,7 +480,7 @@ export function GeneralLedgerView({
 
               <div className="space-y-2 pt-2">
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-700">Journal Lines (Debit must equal Credit)</span>
+                  <span className="font-bold text-slate-700">{tr("Journal Lines (Debit must equal Credit)")}</span>
                   <button
                     type="button"
                     onClick={addLine}
@@ -494,7 +505,7 @@ export function GeneralLedgerView({
                     </select>
                     <input
                       type="text"
-                      placeholder="Line memo"
+                      placeholder={tr("Line memo")}
                       value={line.memo}
                       onChange={(e) => updateLine(idx, 'memo', e.target.value)}
                       className="col-span-3 border border-slate-300 rounded-lg px-2 py-1.5 bg-white"
@@ -503,27 +514,27 @@ export function GeneralLedgerView({
                       type="number"
                       step="0.01"
                       min="0"
-                      placeholder="Debit SAR"
+                      placeholder={tr("Debit SAR")}
                       value={line.debit}
                       onChange={(e) => updateLine(idx, 'debit', e.target.value)}
-                      className="col-span-2 border border-slate-300 rounded-lg px-2 py-1.5 text-right font-mono font-bold bg-white"
+                      className="col-span-2 border border-slate-300 rounded-lg px-2 py-1.5 text-end font-mono font-bold bg-white"
                     />
                     <input
                       type="number"
                       step="0.01"
                       min="0"
-                      placeholder="Credit SAR"
+                      placeholder={tr("Credit SAR")}
                       value={line.credit}
                       onChange={(e) => updateLine(idx, 'credit', e.target.value)}
-                      className="col-span-2 border border-slate-300 rounded-lg px-2 py-1.5 text-right font-mono font-bold bg-white"
+                      className="col-span-2 border border-slate-300 rounded-lg px-2 py-1.5 text-end font-mono font-bold bg-white"
                     />
                   </div>
                 ))}
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-slate-900 text-white font-mono text-xs">
-                <div>Total Debit: <strong>SAR {formatSAR(jvTotals.dr)}</strong></div>
-                <div>Total Credit: <strong>SAR {formatSAR(jvTotals.cr)}</strong></div>
+                <div>{tr("Total Debit:")} <strong>{tr("SAR")}{" "}{formatSAR(jvTotals.dr)}</strong></div>
+                <div>{tr("Total Credit:")} <strong>{tr("SAR")}{" "}{formatSAR(jvTotals.cr)}</strong></div>
                 <div className={jvTotals.isBalanced ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
                   {jvTotals.isBalanced ? 'BALANCED (READY TO POST)' : `Difference: SAR ${formatSAR(Math.abs(jvTotals.diff))}`}
                 </div>
@@ -534,7 +545,7 @@ export function GeneralLedgerView({
                 disabled={saving || !jvTotals.isBalanced}
                 className="w-full py-3 rounded-xl bg-blue-600 disabled:bg-slate-300 text-white font-semibold cursor-pointer"
               >
-                {saving ? 'Posting Journal Voucher...' : 'Post Balanced Journal Voucher to GL'}
+                {saving ? tr('Posting Journal Voucher...') : tr('Post Balanced Journal Voucher to GL')}
               </button>
             </form>
           </div>
