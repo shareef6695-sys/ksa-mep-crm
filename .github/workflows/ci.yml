@@ -71,16 +71,20 @@ jobs:
           mv /tmp/migrations supabase/migrations
           supabase status -o env > /tmp/sb.env
           cat /tmp/sb.env | grep -E '^(API_URL|DB_URL)='
-      - name: Apply migrations (0001-0004, 0006-0016, then 0005)
+      - name: Apply 0001 and seed test users (0002 needs an active admin profile)
         run: |
           source /tmp/sb.env
-          for m in 0001_baseline 0002_roles_rls 0003_audit_lock 0004_posting 0006_credit_receipts 0007_commissions 0008_reporting \
-                   0009_vat 0010_zatca_phase2 0011_inventory 0012_procurement 0013_sales_controls 0014_projects_contracts 0015_notifications 0016_billing_completion 0005_lock_writes; do
-            psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f supabase/migrations/$m.sql
-          done
-      - name: Seed test users
+          DATABASE_URL="$DB_URL" node scripts/apply-migrations.mjs --project local --only 0001
+          sleep 2   # PostgREST reloads its schema cache after 0001
+          SUPABASE_URL="$API_URL" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" node e2e/seed.mjs
+      - name: Apply the remaining migrations (documented order, 0005 last)
         run: |
           source /tmp/sb.env
+          DATABASE_URL="$DB_URL" node scripts/apply-migrations.mjs --project local --from 0002
+      - name: Seed test users again (user_roles, after every migration)
+        run: |
+          source /tmp/sb.env
+          sleep 2
           SUPABASE_URL="$API_URL" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" node e2e/seed.mjs
       - run: npx playwright install --with-deps chromium
       - name: Playwright

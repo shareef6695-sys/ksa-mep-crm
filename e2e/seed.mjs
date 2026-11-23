@@ -33,7 +33,9 @@ for (const u of USERS) {
     id: user.id, email: u.email, full_name: u.name, role_key: u.role, division: u.division || null,
     is_salesman: !!u.salesman, commission_pct: u.pct || 0, active: true,
   })).error);
-  fail(`role ${u.email}`, (await sb.from('user_roles').upsert({ user_id: user.id, role: u.role, division: u.division || null, active: true })).error);
+  // user_roles is created by 0002; CI seeds once after 0001 (0002 needs an admin profile) and again at the end.
+  const roleRes = await sb.from('user_roles').upsert({ user_id: user.id, role: u.role, division: u.division || null, active: true });
+  if (roleRes.error && !['PGRST205', '42P01'].includes(roleRes.error.code)) fail(`role ${u.email}`, roleRes.error);
 }
 fail('company profile', (await sb.from('app_settings').upsert({
   key: 'company_profile',
