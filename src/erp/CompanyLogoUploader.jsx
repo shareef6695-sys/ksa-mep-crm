@@ -8,6 +8,16 @@ export function CompanyLogoUploader({ logoUrl, onChange }) {
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    e.target.value = '';
+    // same limits as the database (0022): PNG / JPEG / WebP / SVG, at most 1 MB
+    if (!['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'].includes(file.type)) {
+      window.alert('Choose a PNG, JPEG, WebP or SVG image.');
+      return;
+    }
+    if (file.size > 1024 * 1024) {
+      window.alert('The logo must be 1 MB or smaller.');
+      return;
+    }
     setProcessing(true);
 
     const reader = new FileReader();
@@ -43,7 +53,7 @@ export function CompanyLogoUploader({ logoUrl, onChange }) {
         setProcessing(false);
       };
       img.onerror = () => {
-        onChange(dataUrl);
+        window.alert('That file could not be read as an image.');
         setProcessing(false);
       };
       img.src = dataUrl;

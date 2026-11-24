@@ -1,3 +1,4 @@
+import { csvCell } from './csvSafe.js';
 // Customer CSV import: parse a CSV (Zoho Books "Contacts" export or a plain template), map it onto the customers
 // columns and list what each row is missing. Pure functions, unit-tested in __tests__/customerImport.test.js.
 // The database (import_customers, migration 0018) does the final checks and skips duplicates.
@@ -218,5 +219,4 @@ export function buildImportPreview(text, existing = []) {
 export const TEMPLATE_HEADERS = ['name_en', 'name_ar', 'customer_type', 'vat_number', 'cr_number', 'contact_person', 'phone', 'email',
   'building_no', 'street', 'district', 'city', 'postal_code', 'additional_no', 'country', 'credit_limit_sar', 'payment_terms'];
 
-const csvCell = (v) => (/[",\n\r]/.test(String(v ?? '')) ? `"${String(v).replace(/"/g, '""')}"` : String(v ?? ''));
 export const toCsv = (headers, rows) => [headers, ...rows].map((r) => r.map(csvCell).join(',')).join('\r\n');

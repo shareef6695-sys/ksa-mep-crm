@@ -1,11 +1,7 @@
+import { csvCell } from '../lib/csvSafe';
+
 export function downloadCsvFile(filename, headers, rows) {
-  const escapeCell = (val) => {
-    const str = val === null || val === undefined ? '' : String(val);
-    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-      return `"${str.replace(/"/g, '""')}"`;
-    }
-    return str;
-  };
+  const escapeCell = csvCell;
 
   const csvLines = [
     headers.map(escapeCell).join(','),
