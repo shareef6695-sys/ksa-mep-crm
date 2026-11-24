@@ -1,11 +1,25 @@
 node_modules
 dist
-.env
 .DS_Store
 test-results
 playwright-report
 supabase/.temp
 supabase/.branches
+.vercel
+
+# secrets: never commit (the .example files are the templates)
+.env
+.env.*
+!.env.example
+supabase/.env
+supabase/functions/.env
+!supabase/functions/.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# real business data
 Contacts.csv
 backups/
 imports/

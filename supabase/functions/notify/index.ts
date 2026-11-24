@@ -20,6 +20,7 @@
 // =====================================================================
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { render, type QueueItem } from '../_shared/notify/messages.ts';
+import { publicError, safeEqual } from '../_shared/safe.ts';
 import { emailProvider, send, whatsappProvider } from '../_shared/notify/senders.ts';
 
 const cors = {
@@ -41,7 +42,7 @@ Deno.serve(async (req) => {
   const cron = req.headers.get('x-notify-cron');
   let dryRun = body.dryRun === true;
   if (cron) {
-    if (!env.NOTIFY_CRON_SECRET || cron !== env.NOTIFY_CRON_SECRET) return json(401, { error: 'Bad cron secret.' });
+    if (!safeEqual(cron, env.NOTIFY_CRON_SECRET)) return json(401, { error: 'Bad cron secret.' });
   } else {
     const token = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
     const { data, error } = token ? await admin.auth.getUser(token) : { data: null, error: true };
@@ -52,7 +53,7 @@ Deno.serve(async (req) => {
   }
 
   const { data: queue, error: qe } = await admin.rpc('notification_queue', {});
-  if (qe) return json(500, { error: qe.message });
+  if (qe) return json(500, { error: publicError('notify', qe, false) });
   const items = ((queue || []) as QueueItem[]).slice(0, Math.min(Math.max(Number(body.limit) || 200, 1), 1000));
   const results = [];
   for (const m of items) {

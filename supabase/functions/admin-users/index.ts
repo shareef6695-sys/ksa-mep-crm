@@ -15,6 +15,7 @@
 // Deploy:  supabase functions deploy admin-users
 // (SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY are provided automatically.)
 // =====================================================================
+import { publicError } from '../_shared/safe.ts';
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2';
 
 const ROLES = ['admin', 'ceo', 'finance', 'manager', 'sales_mep', 'sales_it', 'procurement'] as const;
@@ -206,8 +207,6 @@ Deno.serve(async (req) => {
     }
   } catch (e) {
     const status = e instanceof HttpError ? e.status : 500;
-    const message = e instanceof Error ? e.message : 'Unexpected error.';
-    if (status >= 500) console.error('admin-users error:', e);
-    return json(status, { error: message });
+    return json(status, { error: publicError('admin-users', e, e instanceof HttpError) });
   }
 });

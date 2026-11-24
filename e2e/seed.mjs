@@ -1,12 +1,12 @@
 // Seeds a LOCAL / CI Supabase stack for the end-to-end tests: test users with roles and a company profile.
 // Refuses to run against anything but localhost. Usage:
-//   SUPABASE_URL=http://127.0.0.1:54321 SUPABASE_SERVICE_ROLE_KEY=... node e2e/seed.mjs
+//   SUPABASE_URL=http://127.0.0.1:54321 SUPABASE_SERVICE_ROLE_KEY=... E2E_PASSWORD=... node e2e/seed.mjs
 import { createClient } from '@supabase/supabase-js';
 
 const url = process.env.SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const password = process.env.E2E_PASSWORD || 'Test-1234';
-if (!url || !key) throw new Error('Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.');
+const password = process.env.E2E_PASSWORD;
+if (!url || !key || !password) throw new Error('Set SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY and E2E_PASSWORD (any throwaway value).');
 if (!/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?/.test(url)) throw new Error(`Refusing to seed ${url}: local stacks only.`);
 
 const sb = createClient(url, key, { auth: { persistSession: false } });
@@ -42,4 +42,4 @@ fail('company profile', (await sb.from('app_settings').upsert({
   value: { nameEn: 'Horizon Business Solutions Est.', vatNumber: '300000000000003', crNumber: '4030000000', buildingNo: '7788',
            street: 'Tahlia St', district: 'Al Andalus', city: 'Jeddah', postalCode: '23326' },
 })).error);
-console.log(`Seeded ${USERS.length} users (password ${password === 'Test-1234' ? 'Test-1234' : 'from E2E_PASSWORD'}).`);
+console.log(`Seeded ${USERS.length} users (password from E2E_PASSWORD).`);
