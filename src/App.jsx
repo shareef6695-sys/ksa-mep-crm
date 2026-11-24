@@ -187,8 +187,8 @@ export default function App() {
           {missingTables.length > 0 && canOpen(profile, 'set_company') && (
             <MessageStrip type="error">
               <span className="font-bold">{t(lang, 'notif.schema', '', { n: missingTables.length })}: </span>
-              <span className="font-mono">{missingTables.join(', ')}</span>. Run <span className="font-mono">supabase/schema_existing.sql</span> then{' '}
-              <span className="font-mono">supabase/schema_finance.sql</span> in the Supabase SQL Editor.
+              <span className="font-mono">{missingTables.join(', ')}</span>. Apply the database migrations in{' '}
+              <span className="font-mono">supabase/migrations/</span> in the order given in the README (Database migrations).
             </MessageStrip>
           )}
 
