@@ -13,6 +13,7 @@ export default function InventoryScreens() {
           {view === 'cat_items' && (
             <ItemsMasterView
               readOnly={!can(profile, 'item.manage')}
+              canImport={can(profile, 'master.import')}
               supabase={supabase}
               items={items}
               customUoms={customUoms}

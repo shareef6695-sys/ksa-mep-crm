@@ -20,6 +20,7 @@ export default function PurchaseScreens() {
           {view === 'pur_vendors' && (
             <VendorsMasterView
               readOnly={!can(profile, 'vendor.manage')}
+              canImport={can(profile, 'master.import')}
               supabase={supabase}
               vendors={vendors}
               currencies={CURRENCIES}
