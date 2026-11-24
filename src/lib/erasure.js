@@ -25,7 +25,7 @@ export async function eraseParty(supabase, kind, record) {
     window.alert(`Not erased: ${error.message}`);
     return false;
   }
-  const parts = Object.entries(data || {}).filter(([k, v]) => typeof v === 'number' && v > 0).map(([k, v]) => `${v} ${k.replace(/_/g, ' ')}`);
+  const parts = Object.entries(data || {}).filter(([, v]) => typeof v === 'number' && v > 0).map(([k, v]) => `${v} ${k.replace(/_/g, ' ')}`);
   window.alert(`Personal data erased for ${record.name_en || record.id}.${parts.length ? ` Also cleaned: ${parts.join(', ')}.` : ''}`);
   return true;
 }
