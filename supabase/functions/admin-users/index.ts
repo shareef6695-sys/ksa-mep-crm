@@ -16,7 +16,7 @@
 // Deploy:  supabase functions deploy admin-users
 // (SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY are provided automatically.)
 // =====================================================================
-import { publicError } from '../_shared/safe.ts';
+import { errorBody, requireEnv, responder } from '../_shared/http.ts';
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2';
 
 const ROLES = ['admin', 'ceo', 'finance', 'manager', 'sales_mep', 'sales_it', 'procurement'] as const;
@@ -32,10 +32,14 @@ const ROLE_LABELS: Record<string, string> = {
 const DIVISIONS = ['MEP', 'IT & ELV', 'Shared'];
 const BAN_FOREVER = '876000h'; // ~100 years
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+const ALLOW_HEADERS = 'authorization, x-client-info, apikey, content-type';
+
+// Rate limits (migration 0021). Password resets are limited per target account, everything else per admin.
+const LIMITS: Record<string, { max: number; seconds: number }> = {
+  reset_password: { max: 3, seconds: 3600 },
+  create: { max: 20, seconds: 3600 },
+  erase: { max: 10, seconds: 3600 },
+  any: { max: 120, seconds: 3600 },
 };
 
 class HttpError extends Error {
@@ -43,9 +47,6 @@ class HttpError extends Error {
     super(message);
   }
 }
-
-const json = (status: number, body: unknown) =>
-  new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
 const str = (v: unknown, max = 200) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 
@@ -191,6 +192,13 @@ async function eraseMember(admin: SupabaseClient, body: Record<string, unknown>,
   return { user_id: userId, erased: true, counts: data };
 }
 
+// Counts one attempt in the bucket; throws 429 when the limit is used up. Fails closed if the limiter is unavailable.
+async function rateLimit(admin: SupabaseClient, bucket: string, rule: { max: number; seconds: number }) {
+  const { data, error } = await admin.rpc('hit_rate_limit', { p_bucket: bucket, p_max: rule.max, p_window_seconds: rule.seconds });
+  if (error) throw new Error(`rate limiter unavailable: ${error.message}`);
+  if (data !== true) throw new HttpError(429, 'Too many attempts. Wait a while and try again.');
+}
+
 async function resetPassword(admin: SupabaseClient, body: Record<string, unknown>) {
   const userId = validUuid(body.user_id);
   const password = validPassword(body.password);
@@ -200,17 +208,19 @@ async function resetPassword(admin: SupabaseClient, body: Record<string, unknown
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  const { json, preflight } = responder(req, ALLOW_HEADERS);
+  if (req.method === 'OPTIONS') return preflight();
   if (req.method !== 'POST') return json(405, { error: 'Use POST.' });
 
   try {
-    const url = Deno.env.get('SUPABASE_URL');
-    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    if (!url || !serviceKey) throw new HttpError(500, 'Function is missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY.');
-    const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    const env = requireEnv('SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY');
+    const admin = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
 
     const callerId = await requireAdmin(admin, req.headers.get('Authorization'));
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+    await rateLimit(admin, `admin-users:${callerId}`, LIMITS.any);
+    if (body.action === 'reset_password') await rateLimit(admin, `reset_password:${str(body.user_id, 64)}`, LIMITS.reset_password);
+    if (body.action === 'create' || body.action === 'erase') await rateLimit(admin, `${body.action}:${callerId}`, LIMITS[body.action]);
 
     switch (body.action) {
       case 'create':
@@ -228,6 +238,6 @@ Deno.serve(async (req) => {
     }
   } catch (e) {
     const status = e instanceof HttpError ? e.status : 500;
-    return json(status, { error: publicError('admin-users', e, e instanceof HttpError) });
+    return json(status, errorBody('admin-users', e, e instanceof HttpError));
   }
 });

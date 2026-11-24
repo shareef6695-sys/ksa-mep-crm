@@ -8,6 +8,11 @@
 //   node scripts/apply-migrations.mjs --project <project-ref>
 //   Remove-Item Env:DATABASE_URL
 //
+// TLS: remote connections always use TLS. To also verify the server certificate (protects against an impostor
+// server), download it from Supabase -> Database -> Settings -> SSL Configuration -> Download certificate and set
+//   $env:DATABASE_CA_CERT = "C:\\path\\to\\prod-ca-2021.crt"
+// Without it the connection is still encrypted, and the script says the certificate was not checked.
+//
 // --project <ref> is required and must appear in DATABASE_URL, so the script can't run against the wrong project.
 // --only 0015,0016,0005 applies just those (still in documented order).
 // --from 0009 resumes at that file after a failed run (re-running earlier files after later ones is not supported:
@@ -20,7 +25,7 @@ import pg from 'pg';
 const ORDER = [
   '0001_baseline', '0002_roles_rls', '0003_audit_lock', '0004_posting',
   '0006_credit_receipts', '0007_commissions', '0008_reporting', '0009_vat', '0010_zatca_phase2', '0011_inventory',
-  '0012_procurement', '0013_sales_controls', '0014_projects_contracts', '0015_notifications', '0016_billing_completion', '0017_vat_view_invoker', '0018_customer_import', '0019_vendor_item_import', '0020_personal_data',
+  '0012_procurement', '0013_sales_controls', '0014_projects_contracts', '0015_notifications', '0016_billing_completion', '0017_vat_view_invoker', '0018_customer_import', '0019_vendor_item_import', '0020_personal_data', '0021_rate_limits',
   '0005_lock_writes', // always last
 ];
 
@@ -44,13 +49,17 @@ if (from) {
   files = files.slice(i);
 }
 
+if (!isLocal && /sslmode=disable/i.test(url)) { console.error('DATABASE_URL has sslmode=disable: remote connections must use TLS. Stopping.'); process.exit(2); }
 const host = (url.match(/@([^:/?]+)/) || [])[1] || 'local socket';
 console.log(`Connecting to ${host} ...`);
 if (/^db\.[a-z0-9]+\.supabase\.co$/.test(host)) {
   console.log('  note: this is the Direct connection (IPv6 only). If it hangs, use Connect -> Session pooler instead.');
 }
+const caFile = process.env.DATABASE_CA_CERT;
+const tls = caFile ? { ca: readFileSync(caFile, 'utf8'), rejectUnauthorized: true } : { rejectUnauthorized: false };
+if (!isLocal) console.log(caFile ? '  TLS: on, server certificate verified.' : '  TLS: on (certificate not verified: set DATABASE_CA_CERT to verify it).');
 const client = new pg.Client({
-  connectionString: url, ssl: isLocal ? false : { rejectUnauthorized: false }, connectionTimeoutMillis: 20000,
+  connectionString: url, ssl: isLocal ? false : tls, connectionTimeoutMillis: 20000,
 });
 try {
   await client.connect();

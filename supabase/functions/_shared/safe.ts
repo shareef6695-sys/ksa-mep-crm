@@ -30,16 +30,3 @@ export function redact(value: unknown): unknown {
   }
   return value;
 }
-
-/**
- * Message safe to return to the caller. Errors we raise on purpose (HttpError, written by us) keep their message;
- * anything unexpected (database, network, library errors) is logged server-side with a reference and the caller only
- * sees the reference.
- */
-export function publicError(fn: string, e: unknown, expected: boolean): string {
-  const message = (e as { message?: string })?.message ?? String(e);
-  if (expected) return message;
-  const ref = crypto.randomUUID().slice(0, 8);
-  console.error(`${fn} error ${ref}:`, redactPII(message));
-  return `Unexpected server error (ref ${ref}). Check the function logs.`;
-}
