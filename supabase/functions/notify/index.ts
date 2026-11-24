@@ -20,56 +20,58 @@
 // =====================================================================
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { render, type QueueItem } from '../_shared/notify/messages.ts';
-import { publicError, safeEqual } from '../_shared/safe.ts';
+import { safeEqual } from '../_shared/safe.ts';
+import { errorBody, requireEnv, responder } from '../_shared/http.ts';
 import { emailProvider, send, whatsappProvider } from '../_shared/notify/senders.ts';
 
-const cors = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-notify-cron',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
-const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
+const ALLOW_HEADERS = 'authorization, x-client-info, apikey, content-type, x-notify-cron';
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
+  const { json, preflight } = responder(req, ALLOW_HEADERS);
+  if (req.method === 'OPTIONS') return preflight();
   if (req.method !== 'POST') return json(405, { error: 'POST only' });
-  const env = Deno.env.toObject();
-  const admin = createClient(env.SUPABASE_URL!, env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
-  let body: { dryRun?: boolean; limit?: number } = {};
-  try { body = await req.json(); } catch { /* empty body */ }
+  try {
+    const need = requireEnv('SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY');
+    const env: Record<string, string | undefined> = Deno.env.toObject();
+    const admin = createClient(need.SUPABASE_URL, need.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+    let body: { dryRun?: boolean; limit?: number } = {};
+    try { body = await req.json(); } catch { /* empty body */ }
 
-  // who is calling
-  const cron = req.headers.get('x-notify-cron');
-  let dryRun = body.dryRun === true;
-  if (cron) {
-    if (!safeEqual(cron, env.NOTIFY_CRON_SECRET)) return json(401, { error: 'Bad cron secret.' });
-  } else {
-    const token = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
-    const { data, error } = token ? await admin.auth.getUser(token) : { data: null, error: true };
-    if (error || !data?.user) return json(401, { error: 'Sign in first.' });
-    const { data: r } = await admin.from('user_roles').select('role, active').eq('user_id', data.user.id).maybeSingle();
-    if (!r?.active || !['admin', 'ceo', 'finance'].includes(r.role)) return json(403, { error: 'Only Admin, CEO or Finance can run reminders.' });
-    if (body.dryRun !== false) dryRun = true; // the app previews unless it explicitly asks to send
-  }
-
-  const { data: queue, error: qe } = await admin.rpc('notification_queue', {});
-  if (qe) return json(500, { error: publicError('notify', qe, false) });
-  const items = ((queue || []) as QueueItem[]).slice(0, Math.min(Math.max(Number(body.limit) || 200, 1), 1000));
-  const results = [];
-  for (const m of items) {
-    const r = render(m);
-    const res = await send(env, m, r, (url, init) => fetch(url, init), dryRun);
-    if (!dryRun) {
-      await admin.rpc('record_notification', { p: { kind: m.kind, channel: m.channel, to: m.to, refId: m.refId, subject: r.subject, body: r.text,
-        status: res.status, provider: res.provider, providerId: res.providerId, error: res.error } });
+    // who is calling
+    const cron = req.headers.get('x-notify-cron');
+    let dryRun = body.dryRun === true;
+    if (cron) {
+      if (!safeEqual(cron, env.NOTIFY_CRON_SECRET)) return json(401, { error: 'Bad cron secret.' });
+    } else {
+      const token = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+      const { data, error } = token ? await admin.auth.getUser(token) : { data: null, error: true };
+      if (error || !data?.user) return json(401, { error: 'Sign in first.' });
+      const { data: r } = await admin.from('user_roles').select('role, active').eq('user_id', data.user.id).maybeSingle();
+      if (!r?.active || !['admin', 'ceo', 'finance'].includes(r.role)) return json(403, { error: 'Only Admin, CEO or Finance can run reminders.' });
+      if (body.dryRun !== false) dryRun = true; // the app previews unless it explicitly asks to send
     }
-    results.push({ kind: m.kind, channel: m.channel, to: m.to, subject: r.subject, status: res.status, provider: res.provider, error: res.error });
+
+    const { data: queue, error: qe } = await admin.rpc('notification_queue', {});
+    if (qe) return json(500, errorBody('notify', qe, false));
+    const items = ((queue || []) as QueueItem[]).slice(0, Math.min(Math.max(Number(body.limit) || 200, 1), 1000));
+    const results = [];
+    for (const m of items) {
+      const r = render(m);
+      const res = await send(env, m, r, (url, init) => fetch(url, init), dryRun);
+      if (!dryRun) {
+        await admin.rpc('record_notification', { p: { kind: m.kind, channel: m.channel, to: m.to, refId: m.refId, subject: r.subject, body: r.text,
+          status: res.status, provider: res.provider, providerId: res.providerId, error: res.error } });
+      }
+      results.push({ kind: m.kind, channel: m.channel, to: m.to, subject: r.subject, status: res.status, provider: res.provider, error: res.error });
+    }
+    return json(200, {
+      dryRun, total: results.length,
+      sent: results.filter((x) => x.status === 'sent').length,
+      failed: results.filter((x) => x.status === 'failed').length,
+      providers: { email: emailProvider(env) || 'none (dry run)', whatsapp: whatsappProvider(env) || 'none (dry run)' },
+      messages: results,
+    });
+  } catch (e) {
+    return json(500, errorBody('notify', e, false));
   }
-  return json(200, {
-    dryRun, total: results.length,
-    sent: results.filter((x) => x.status === 'sent').length,
-    failed: results.filter((x) => x.status === 'failed').length,
-    providers: { email: emailProvider(env) || 'none (dry run)', whatsapp: whatsappProvider(env) || 'none (dry run)' },
-    messages: results,
-  });
 });

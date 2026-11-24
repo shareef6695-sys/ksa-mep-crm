@@ -16,7 +16,8 @@
 //           ZATCA_CRON_SECRET = any long random string (for the scheduled queue run)
 // Deploy:   supabase functions deploy zatca
 // =====================================================================
-import { publicError, redact, safeEqual } from '../_shared/safe.ts';
+import { redact, safeEqual } from '../_shared/safe.ts';
+import { errorBody, requireEnv, responder } from '../_shared/http.ts';
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { buildCsr, newPrivateKey, readCertificate, validateCsrInput, type CsrInput, type ZatcaEnvironment } from '../_shared/zatca/crypto.ts';
 import { fromBase64, fromHex, toBase64, toHex, utf8 } from '../_shared/zatca/der.ts';
@@ -24,19 +25,13 @@ import { INITIAL_PIH, qrFromXml, signDocument } from '../_shared/zatca/ubl.ts';
 import { complianceDocuments, payloadToDocument, sellerFromCompany, totalsMismatch, type DocPayload } from '../_shared/zatca/mapping.ts';
 import { complianceCheck, messagesOf, requestComplianceCsid, requestProductionCsid, submitDocument, type Csid } from '../_shared/zatca/api.ts';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-zatca-cron',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
+const ALLOW_HEADERS = 'authorization, x-client-info, apikey, content-type, x-zatca-cron';
 
 class HttpError extends Error {
   constructor(public status: number, message: string) {
     super(message);
   }
 }
-const json = (status: number, body: unknown) =>
-  new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 const str = (v: unknown, max = 200) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 const ENVIRONMENTS: ZatcaEnvironment[] = ['sandbox', 'simulation', 'production'];
 const DOC_TYPES = ['invoice', 'credit_note', 'debit_note'];
@@ -270,10 +265,12 @@ async function status(db: SupabaseClient) {
 
 // ---------------------------------------------------------------- entry
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  const { json, preflight } = responder(req, ALLOW_HEADERS);
+  if (req.method === 'OPTIONS') return preflight();
   if (req.method !== 'POST') return json(405, { error: 'POST only' });
-  const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } });
   try {
+    const env = requireEnv('SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY');
+    const db = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     const action = str(body.action, 40);
     const cron = Deno.env.get('ZATCA_CRON_SECRET');
@@ -305,6 +302,6 @@ Deno.serve(async (req) => {
     }
   } catch (e) {
     const status = e instanceof HttpError ? e.status : 500;
-    return json(status, { error: publicError('zatca', e, e instanceof HttpError) });
+    return json(status, errorBody('zatca', e, e instanceof HttpError));
   }
 });

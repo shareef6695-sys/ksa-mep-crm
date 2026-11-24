@@ -24,7 +24,8 @@ Bilingual EN/AR (RTL). Currency SAR.
 - `src/lib/` — supabase client, permissions, fetchAll, zatca helpers, `quoteMath.js`, `aging.js` (pure, unit-tested).
 - `src/ui/` — Fiori-style shell, SmartFilterBar, i18n (`t()`), `financeI18n.js` + `financeAr.js` (Arabic finance screens: `tr()`).
 - `supabase/migrations/` — the source of truth for the database. `0001_baseline.sql` = schema as of 2026-11-22.
-  `supabase/schema_existing.sql` and `schema_finance.sql` are the old hand-run scripts, kept for reference only.
+  The old hand-run scripts (`schema_existing.sql`, `schema_finance.sql`) were removed: they created allow-all RLS policies.
+  Never add a `using (true)` policy for `authenticated`: policies are OR-ed, so one such policy undoes every role rule.
 - `supabase/functions/` — Edge Functions `admin-users`, `zatca`, `notify` (+ `_shared/zatca`, `_shared/notify`).
 - `supabase/tests/` — SQL suites (`run_sql_tests.sh` runs them all in the right order on a throw-away Postgres;
   `supabase_stub.sql` stands in for Supabase's `auth` schema), Vitest tests for the Edge Function code.

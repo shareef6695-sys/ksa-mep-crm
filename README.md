@@ -67,7 +67,7 @@ Order:
 0001_baseline  0002_roles_rls  0003_audit_lock  0004_posting
 0006_credit_receipts  0007_commissions  0008_reporting  0009_vat  0010_zatca_phase2  0011_inventory
 0012_procurement  0013_sales_controls  0014_projects_contracts  0015_notifications  0016_billing_completion
-0017_vat_view_invoker  0018_customer_import  0019_vendor_item_import  0020_personal_data
+0017_vat_view_invoker  0018_customer_import  0019_vendor_item_import  0020_personal_data  0021_rate_limits
 0005_lock_writes      ← always last: it removes direct table writes once every posting function exists
 ```
 
@@ -104,8 +104,14 @@ Rules:
 - `DATABASE_URL` is set in the terminal for one command and cleared; it is never saved in a file.
 - `.env`, `.env.*`, key files, `Contacts.csv`, `backups/` and `imports/` are git-ignored.
 - `npm run check:secrets` (also in CI) fails if a key, token, private key or connection string is committed.
-- Edge Functions return only our own error messages; unexpected errors are logged server-side and the caller gets a
-  reference number.
+- Edge Functions answer only the app's own origin (CORS, `ALLOWED_ORIGINS`), send `nosniff` / `no-store` headers, and
+  return `{ error, ref }`: our own message, or a generic one for anything unexpected. The detail is in the function
+  log under the same `ref`.
+- Rate limits: sign-in / sign-up 25 per 5 minutes per IP and auth emails 2 per hour (Supabase Auth -> Rate Limits);
+  public sign-up is off. `admin-users`: 3 password resets per account per hour, 20 new users and 10 erasures per admin
+  per hour (`0021_rate_limits`).
+- Database: TLS on every connection (enable Database -> Settings -> Enforce SSL); `scripts/apply-migrations.mjs`
+  refuses `sslmode=disable` and verifies the server certificate when `DATABASE_CA_CERT` is set.
 
 If a real secret is ever pushed: rotate it first (Supabase → Project Settings → API / Database; the provider's
 dashboard for others), then remove it from the code. Rewriting history alone is not enough: forks and caches keep it.
@@ -132,6 +138,7 @@ with `supabase secrets set NAME=value` (or Dashboard → Edge Functions → Secr
 | `zatca` | `ZATCA_CRON_SECRET` | long random string; lets the schedule process the B2C reporting queue |
 | `notify` | `NOTIFY_CRON_SECRET` | long random string; lets the schedule send reminders |
 | `notify` | `NOTIFY_EMAIL_PROVIDER` … | see [Notifications](#notifications-email--whatsapp) |
+| all | `ALLOWED_ORIGINS` | optional; comma-separated browser origins allowed to call the functions (CORS). Default: `https://ksa-mep-crm.vercel.app`. Add a custom domain here |
 
 ZATCA onboarding (CSR, OTP from the Fatoora portal, compliance checks, production CSID) is done from
 **Administration → ZATCA Phase 2 (Fatoora)**. Start in the sandbox; `CLAUDE.md` → "ZATCA Phase 2" has the details.
