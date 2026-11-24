@@ -23,6 +23,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
+      - run: npm run check:secrets
       - run: npm test
       - run: npm run build
         env:
@@ -59,6 +60,11 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Throwaway password for the test users (random per run, masked in logs)
+        run: |
+          pw="$(openssl rand -hex 16)"
+          echo "::add-mask::$pw"
+          echo "E2E_PASSWORD=$pw" >> "$GITHUB_ENV"
       - uses: supabase/setup-cli@v3
         with:
           version: 2.122.1   # pinned; v3 of the action installs from npm (no GitHub API rate limit)

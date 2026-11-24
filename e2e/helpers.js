@@ -1,7 +1,9 @@
 // Shared steps for the end-to-end tests.
 import { expect } from '@playwright/test';
 
-export const PASSWORD = process.env.E2E_PASSWORD || 'Test-1234';
+// Throwaway password for the local / CI test users; never a real one. CI generates a random value per run.
+export const PASSWORD = process.env.E2E_PASSWORD;
+if (!PASSWORD) throw new Error('Set E2E_PASSWORD (any throwaway value; the same one used for e2e/seed.mjs).');
 export const stamp = () => new Date().toISOString().replace(/\D/g, '').slice(2, 14);
 
 export async function login(page, email) {

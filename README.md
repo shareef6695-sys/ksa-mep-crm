@@ -54,7 +54,7 @@ Browser (`.env`, and the same two in your hosting provider):
 | `VITE_SUPABASE_ANON_KEY` | Supabase → Project Settings → API → `anon` public key |
 
 Never put the `service_role` key, ZATCA keys or provider API keys in `.env` or anywhere in the browser build. They are
-Edge Function secrets (below). `.env` is git-ignored.
+Edge Function secrets (below). `.env` is git-ignored. See [Security](#security-secrets-and-keys).
 
 ## Database migrations
 
@@ -82,6 +82,33 @@ A new migration that adds a posting function: apply it, then re-run `0005_lock_w
 
 The comments at the top of each migration explain what it changes and anything to check afterwards. `CLAUDE.md` has the
 accounting rules (which accounts each document posts to).
+
+## Security: secrets and keys
+
+**Rotate any secret that was ever committed.** Removing a value from the code does not remove it from git history,
+and this repository is public. Treat anything that was once hardcoded as exposed:
+
+| What was in history | Where | Risk | Action |
+|---|---|---|---|
+| Supabase **anon** key, current project | `src/App.jsx` (commits 4320b7b … d8565b8, Nov 2026) | Low: the anon key is public by design and every table has RLS; it is also in the live bundle | Optional: rotate it (or move to the new publishable key), update Vercel, redeploy |
+| Supabase **anon** key, old project `hqzqhydegxvpqqczvjmv` | `src/App.jsx` (commit 898eb70) | Low | Pause or delete that old project if it is no longer used |
+
+No service-role key, database password, ZATCA key or provider key has ever been committed.
+
+Rules:
+
+- The browser gets only `VITE_SUPABASE_URL` and the **anon / publishable** key. The build stops if any other
+  secret-looking `VITE_` variable is set, and the app refuses to start with a service-role key.
+- The service-role key, ZATCA keys, cron secrets and email / WhatsApp keys are **Edge Function secrets**
+  (`supabase/functions/.env.example`). Cron jobs read their secret from **Supabase Vault**, never from the job text.
+- `DATABASE_URL` is set in the terminal for one command and cleared; it is never saved in a file.
+- `.env`, `.env.*`, key files, `Contacts.csv`, `backups/` and `imports/` are git-ignored.
+- `npm run check:secrets` (also in CI) fails if a key, token, private key or connection string is committed.
+- Edge Functions return only our own error messages; unexpected errors are logged server-side and the caller gets a
+  reference number.
+
+If a real secret is ever pushed: rotate it first (Supabase → Project Settings → API / Database; the provider's
+dashboard for others), then remove it from the code. Rewriting history alone is not enough: forks and caches keep it.
 
 ## Edge Functions and secrets
 
@@ -198,7 +225,8 @@ supabase status -o env > /tmp/sb.env && source /tmp/sb.env
 for m in 0001_baseline 0002_roles_rls 0003_audit_lock 0004_posting 0006_credit_receipts 0007_commissions 0008_reporting \
          0009_vat 0010_zatca_phase2 0011_inventory 0012_procurement 0013_sales_controls 0014_projects_contracts \
          0015_notifications 0016_billing_completion 0005_lock_writes; do psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f supabase/migrations/$m.sql; done
-SUPABASE_URL=$API_URL SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY node e2e/seed.mjs   # test users, password Test-1234
+export E2E_PASSWORD=$(openssl rand -hex 16)   # throwaway password for the local test users
+SUPABASE_URL=$API_URL SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY node e2e/seed.mjs
 npx playwright install chromium
 VITE_SUPABASE_URL=$API_URL VITE_SUPABASE_ANON_KEY=$ANON_KEY npm run test:e2e
 ```

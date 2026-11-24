@@ -1,9 +1,11 @@
 -- =====================================================================
 -- Optional: send waiting ZATCA documents every 15 minutes (B2C must be reported within 24 hours).
--- Not a migration: it holds a secret. Run it once in the Supabase SQL Editor AFTER
+-- Run it once in the Supabase SQL Editor AFTER
 --   1. enabling the pg_cron and pg_net extensions (Database -> Extensions),
 --   2. deploying the `zatca` Edge Function and setting its ZATCA_CRON_SECRET secret,
---   3. replacing <PROJECT_REF>, <ANON_KEY> (the public anon key, needed to pass the gateway) and <ZATCA_CRON_SECRET> below.
+--   3. storing the SAME value in Supabase Vault (then clear the editor), so it never appears in the job definition:
+--        select vault.create_secret('<ZATCA_CRON_SECRET>', 'zatca_cron_secret');
+--   4. replacing <PROJECT_REF> and <ANON_KEY> (the public anon key, needed to pass the gateway) below.
 -- The function also runs right after each invoice / credit note / debit note is posted, and
 -- Finance can press "Send queued documents now" on the ZATCA Phase 2 screen.
 -- =====================================================================
@@ -11,7 +13,8 @@ select cron.unschedule('zatca-queue') where exists (select 1 from cron.job where
 select cron.schedule('zatca-queue', '*/15 * * * *', $$
   select net.http_post(
     url := 'https://<PROJECT_REF>.supabase.co/functions/v1/zatca',
-    headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer <ANON_KEY>', 'x-zatca-cron', '<ZATCA_CRON_SECRET>'),
+    headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer <ANON_KEY>',
+                                  'x-zatca-cron', (select decrypted_secret from vault.decrypted_secrets where name = 'zatca_cron_secret')),
     body := jsonb_build_object('action', 'process_queue', 'limit', 50),
     timeout_milliseconds := 120000
   );

@@ -5,7 +5,7 @@
 //
 // Usage (PowerShell):
 //   $env:DATABASE_URL = "<Supabase -> Connect -> Session pooler connection string, with your DB password>"
-//   node scripts/apply-migrations.mjs --project jknuhynysewoizjxbidw
+//   node scripts/apply-migrations.mjs --project <project-ref>
 //   Remove-Item Env:DATABASE_URL
 //
 // --project <ref> is required and must appear in DATABASE_URL, so the script can't run against the wrong project.
@@ -32,7 +32,7 @@ const only = arg('--only')?.split(',').map((s) => s.trim());
 const from = arg('--from');
 
 if (!url) { console.error('Set DATABASE_URL first (see the comment at the top of this file).'); process.exit(2); }
-if (!project) { console.error('Pass --project <project ref>, e.g. --project jknuhynysewoizjxbidw'); process.exit(2); }
+if (!project) { console.error('Pass --project <project ref>, e.g. --project <project-ref>'); process.exit(2); }
 const isLocal = /@(localhost|127\.0\.0\.1)|host=\/|^postgres(ql)?:\/\/[^@]*$/.test(url);
 if (!isLocal && !url.includes(project)) { console.error(`DATABASE_URL is not for project ${project}. Stopping.`); process.exit(2); }
 

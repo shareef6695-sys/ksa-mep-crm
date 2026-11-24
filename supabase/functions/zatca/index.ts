@@ -16,6 +16,7 @@
 //           ZATCA_CRON_SECRET = any long random string (for the scheduled queue run)
 // Deploy:   supabase functions deploy zatca
 // =====================================================================
+import { publicError, redact, safeEqual } from '../_shared/safe.ts';
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { buildCsr, newPrivateKey, readCertificate, validateCsrInput, type CsrInput, type ZatcaEnvironment } from '../_shared/zatca/crypto.ts';
 import { fromBase64, fromHex, toBase64, toHex, utf8 } from '../_shared/zatca/der.ts';
@@ -90,7 +91,7 @@ async function company(db: SupabaseClient): Promise<Record<string, string>> {
 function csidFrom(body: Record<string, unknown>): Csid {
   const binarySecurityToken = str(body.binarySecurityToken, 20000);
   const secret = str(body.secret, 500);
-  if (!binarySecurityToken || !secret) throw new HttpError(502, `ZATCA did not return a CSID: ${JSON.stringify(body).slice(0, 400)}`);
+  if (!binarySecurityToken || !secret) throw new HttpError(502, `ZATCA did not return a CSID: ${JSON.stringify(redact(body)).slice(0, 400)}`);
   return { binarySecurityToken, secret, requestID: body.requestID as string };
 }
 
@@ -276,7 +277,7 @@ Deno.serve(async (req) => {
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     const action = str(body.action, 40);
     const cron = Deno.env.get('ZATCA_CRON_SECRET');
-    if (action === 'process_queue' && cron && req.headers.get('x-zatca-cron') === cron) {
+    if (action === 'process_queue' && cron && safeEqual(req.headers.get('x-zatca-cron'), cron)) {
       return json(200, await processQueue(db, Math.min(100, Number(body.limit) || 25)));
     }
     const me = await callerRole(db, req.headers.get('Authorization'));
@@ -304,6 +305,6 @@ Deno.serve(async (req) => {
     }
   } catch (e) {
     const status = e instanceof HttpError ? e.status : 500;
-    return json(status, { error: e instanceof Error ? e.message : String(e) });
+    return json(status, { error: publicError('zatca', e, e instanceof HttpError) });
   }
 });
