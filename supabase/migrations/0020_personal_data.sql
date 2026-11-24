@@ -13,6 +13,7 @@
 --    legal / trade names, VAT and CR numbers, business addresses, document amounts, and names already printed on
 --    posted documents. A team member is also deactivated; the admin-users function removes the login's email.
 --    Every erasure is recorded in public.data_erasures (who, when, what kind, counts; no personal data).
+-- has_role is called as has_role(variadic array[...]::text[]): bare literals do not resolve on every Postgres / SQL editor.
 -- Idempotent.
 -- =====================================================================
 begin;
@@ -24,7 +25,7 @@ alter table public.vendors       add column if not exists personal_data_erased_a
 
 create or replace function public.can_see_team_contacts() returns boolean
 language sql stable security definer set search_path = public as $$
-  select public.has_role('admin', 'ceo', 'finance', 'manager')
+  select public.has_role(variadic array['admin', 'ceo', 'finance', 'manager']::text[])
 $$;
 
 drop policy if exists team_profiles_read on public.team_profiles;
@@ -56,7 +57,7 @@ alter table public.data_erasures enable row level security;
 revoke all on public.data_erasures from anon, authenticated;
 grant select on public.data_erasures to authenticated;
 drop policy if exists data_erasures_read on public.data_erasures;
-create policy data_erasures_read on public.data_erasures for select to authenticated using (public.has_role('admin', 'ceo'));
+create policy data_erasures_read on public.data_erasures for select to authenticated using (public.has_role(variadic array['admin', 'ceo']::text[]));
 
 -- jsonb with the given keys set to '[REDACTED]' where they hold a value
 create or replace function public._redact_keys(j jsonb, keys text[]) returns jsonb
@@ -86,7 +87,7 @@ declare
                             'supplier_email', 'supplier_phone', 'contactPerson', 'contactPhone', 'contactEmail'];
 begin
   -- admin in the app; auth.uid() is null only for the service role (admin-users function) or a maintenance session
-  if auth.uid() is not null and not public.has_role('admin') then
+  if auth.uid() is not null and not public.has_role(variadic array['admin']::text[]) then
     raise exception 'Only a System Administrator can erase personal data.';
   end if;
   if p_kind not in ('customer', 'vendor', 'team_member') then raise exception 'Unknown kind "%".', p_kind; end if;
