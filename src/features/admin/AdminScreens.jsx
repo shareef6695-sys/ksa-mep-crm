@@ -11,7 +11,7 @@ import { can, canManageNumberRanges } from '../../lib/permissions';
 import { supabase } from '../../lib/supabase';
 
 export default function AdminScreens() {
-  const { company, handleChangeMemberRole, handleCreateTeamMember, handleResetMemberPassword, handleSaveCompanySettings,
+  const { company, handleChangeMemberRole, handleCreateTeamMember, handleEraseMember, handleResetMemberPassword, handleSaveCompanySettings,
     handleToggleMemberActive, handleUpdateSalesmanRule, isAdminUser, lang, memberCreating, memberFeedback, newMember,
     numberRanges, phase2Active, procSettings, profile, refreshAllErpData, salesSettings, selectSubModule, setCompany, setNewMember,
     setProcSettings, setSalesSettings, setShowNewMemberForm, settingsSavedMsg, showNewMemberForm, teamProfiles, view, zatcaAdvice } = useErp();
@@ -73,12 +73,13 @@ export default function AdminScreens() {
                     <div>
                       <label className="block font-semibold text-slate-700 mb-1">Initial Login Password *</label>
                       <input
-                        type="text"
+                        type="password"
+                        autoComplete="new-password"
                         required
-                        minLength={6}
+                        minLength={8}
                         value={newMember.password}
                         onChange={(e) => setNewMember({ ...newMember, password: e.target.value })}
-                        placeholder="Min 6 characters"
+                        placeholder="At least 8 characters"
                         className="w-full border border-slate-300 rounded-xl px-3 py-2 font-mono"
                       />
                     </div>
@@ -212,6 +213,15 @@ export default function AdminScreens() {
                               className={`px-2 py-1 rounded-lg text-xs font-semibold cursor-pointer ${member.active === false ? 'bg-emerald-600 text-white' : 'border border-rose-300 text-rose-700'}`}
                             >
                               {member.active === false ? 'Reactivate' : 'Deactivate'}
+                            </button>
+                          )}
+                          {member.id !== profile?.id && !member.personal_data_erased_at && (
+                            <button
+                              type="button"
+                              onClick={() => handleEraseMember(member)}
+                              className="px-2 py-1 rounded-lg border border-rose-300 text-rose-700 text-xs font-semibold cursor-pointer"
+                            >
+                              Erase personal data
                             </button>
                           )}
                         </>

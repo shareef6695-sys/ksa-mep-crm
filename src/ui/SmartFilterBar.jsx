@@ -94,10 +94,18 @@ const compareValues = (a, b) => {
   return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
 };
 
+// Filter choices are kept per browser tab (sessionStorage) and never include the search text, which can be a
+// customer's name, phone or email. Older versions kept everything in localStorage: that copy is removed.
+try {
+  Object.keys(window.localStorage).filter((k) => k.startsWith('smartfilter:')).forEach((k) => window.localStorage.removeItem(k));
+} catch {
+  // storage blocked
+}
+
 const readStorage = (storageKey) => {
   if (!storageKey) return null;
   try {
-    const raw = window.localStorage.getItem(`smartfilter:${storageKey}`);
+    const raw = window.sessionStorage.getItem(`smartfilter:${storageKey}`);
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
@@ -107,7 +115,7 @@ const readStorage = (storageKey) => {
 const writeStorage = (storageKey, state) => {
   if (!storageKey) return;
   try {
-    window.localStorage.setItem(`smartfilter:${storageKey}`, JSON.stringify(state));
+    window.sessionStorage.setItem(`smartfilter:${storageKey}`, JSON.stringify(state));
   } catch {
     // storage blocked (private mode / quota) — filtering still works in memory
   }
@@ -123,7 +131,7 @@ export function useSmartFilter(rows, config = {}) {
   const initial = useMemo(() => {
     const saved = readStorage(storageKey);
     return {
-      search: saved?.search || '',
+      search: '',
       values: saved?.values && typeof saved.values === 'object' ? saved.values : {},
       sort: saved?.sort !== undefined ? saved.sort : defaultSort,
     };
@@ -135,8 +143,8 @@ export function useSmartFilter(rows, config = {}) {
   const [sort, setSort] = useState(initial.sort);
 
   useEffect(() => {
-    writeStorage(storageKey, { search, values, sort });
-  }, [storageKey, search, values, sort]);
+    writeStorage(storageKey, { values, sort });
+  }, [storageKey, values, sort]);
 
   // Auto-derive select options from distinct row values when none supplied
   const resolvedFilters = useMemo(

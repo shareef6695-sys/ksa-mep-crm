@@ -10,6 +10,15 @@ export function safeEqual(a: string | null | undefined, b: string | null | undef
   return diff === 0;
 }
 
+const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+// 9-15 digits, optionally with + and separators: phone numbers, not dates (8 digits) or invoice amounts
+const PHONE = /(?<![\w.])\+?\d(?:[\s()-]?\d){8,14}(?![\w.])/g;
+
+/** Text with email addresses and phone numbers replaced by [REDACTED], for logs and stored error messages. */
+export function redactPII(text: string): string {
+  return String(text ?? '').replace(EMAIL, '[REDACTED]').replace(PHONE, '[REDACTED]');
+}
+
 const SECRET_FIELD = /^(binarySecurityToken|secret|token|access_token|refresh_token|password|private_?key|api_?key|authorization)$/i;
 
 /** Copy of a JSON value with secret-looking fields replaced, for error messages and logs. */
@@ -31,6 +40,6 @@ export function publicError(fn: string, e: unknown, expected: boolean): string {
   const message = (e as { message?: string })?.message ?? String(e);
   if (expected) return message;
   const ref = crypto.randomUUID().slice(0, 8);
-  console.error(`${fn} error ${ref}:`, message);
+  console.error(`${fn} error ${ref}:`, redactPII(message));
   return `Unexpected server error (ref ${ref}). Check the function logs.`;
 }

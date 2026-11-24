@@ -109,7 +109,7 @@ export default function AdminModals() {
             </div>
             <input type="text" required placeholder="Salesman Full Name *" value={newMember.full_name} onChange={(e) => setNewMember({ ...newMember, full_name: e.target.value, is_salesman: true })} className="w-full border border-slate-300 rounded-xl px-3 py-2" />
             <input type="email" required placeholder="Work Email (Login ID) *" value={newMember.email} onChange={(e) => setNewMember({ ...newMember, email: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2" />
-            <input type="text" required minLength={6} placeholder="Initial Password (Min 6 chars) *" value={newMember.password} onChange={(e) => setNewMember({ ...newMember, password: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2 font-mono" />
+            <input type="password" autoComplete="new-password" required minLength={8} placeholder="Initial Password (at least 8 characters) *" value={newMember.password} onChange={(e) => setNewMember({ ...newMember, password: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2 font-mono" />
             <div className="grid grid-cols-2 gap-2">
               <select value={newMember.division} onChange={(e) => setNewMember({ ...newMember, division: e.target.value })} className="border border-slate-300 rounded-xl px-3 py-2 bg-white">
                 <option value="MEP">MEP Division</option>

@@ -1,6 +1,7 @@
 // Pluggable senders for the notify Edge Function. Nothing is sent unless a provider is configured; without one
 // every message is a dry run (logged in notification_log as dry_run). Request builders are pure for unit tests.
 import type { QueueItem, Rendered } from './messages.ts';
+import { redactPII } from '../safe.ts';
 
 export type Env = Record<string, string | undefined>;
 export interface SendResult { status: 'sent' | 'failed' | 'dry_run'; provider: string; providerId?: string; error?: string }
@@ -101,7 +102,7 @@ export async function send(env: Env, m: QueueItem, r: Rendered, fetchImpl: Fetch
   try {
     const res = await fetchImpl(request.url, request.init);
     const body = await res.text();
-    if (!res.ok) return { status: 'failed', provider, error: `HTTP ${res.status}: ${body.slice(0, 500)}` };
+    if (!res.ok) return { status: 'failed', provider, error: `HTTP ${res.status}: ${redactPII(body.slice(0, 500))}` }; // provider errors can echo the recipient
     let id: string | undefined;
     try {
       const j = JSON.parse(body);
@@ -109,6 +110,6 @@ export async function send(env: Env, m: QueueItem, r: Rendered, fetchImpl: Fetch
     } catch { /* SendGrid answers 202 with an empty body */ }
     return { status: 'sent', provider, providerId: id };
   } catch (e) {
-    return { status: 'failed', provider, error: (e as Error).message };
+    return { status: 'failed', provider, error: redactPII((e as Error).message) };
   }
 }
