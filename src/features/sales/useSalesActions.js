@@ -43,7 +43,7 @@ export function useSalesActions(s) {
 
   const handleCreateInquiry = async (e) => {
     e.preventDefault();
-    const { data: seqInqId } = await supabase.rpc('next_doc_number', { p_doc_type: 'INQUIRY' }); const chosenSalesman = teamProfiles.find((p) => p.id === newInq.salesmanId) || salesmenList[0]; const obj = { id: seqInqId, refNo: seqInqId,
+    const { data: seqInqId } = await supabase.rpc('next_master_code', { p_doc_type: 'INQUIRY' }); const chosenSalesman = teamProfiles.find((p) => p.id === newInq.salesmanId) || salesmenList[0]; const obj = { id: seqInqId, refNo: seqInqId,
       customerId: newInq.customerId || null,
       clientName: newInq.clientName,
       clientVat: newInq.clientVat,

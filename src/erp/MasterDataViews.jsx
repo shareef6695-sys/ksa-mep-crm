@@ -68,7 +68,7 @@ export function CustomersMasterView({ supabase, customers, salesmenList, onRefre
     if (form.vat_number && !isValidKsaVat(form.vat_number)) return setSaveError('VAT number must be 15 digits, starting and ending with 3.');
     if (form.customer_type === 'B2B' && !/^\d{4}$/.test(form.building_no)) return setSaveError('Building number must be 4 digits.');
     if (form.customer_type === 'B2B' && !/^\d{5}$/.test(form.postal_code)) return setSaveError('Postal code must be 5 digits.');
-    const { data: code } = await supabase.rpc('next_doc_number', { p_doc_type: 'CUSTOMER' });
+    const { data: code } = await supabase.rpc('next_master_code', { p_doc_type: 'CUSTOMER' });
     const { error } = await supabase.from('customers').insert({
       id: `cust-${Date.now()}`,
       customer_code: code,
@@ -296,7 +296,7 @@ export function VendorsMasterView({ supabase, vendors, currencies, onRefresh, re
     setSaveError('');
     // Only a KSA supplier's number is checked against the ZATCA format; foreign tax IDs vary.
     if (form.vendor_origin === 'KSA' && !isValidKsaVat(form.vat_number)) return setSaveError('KSA VAT number must be 15 digits, starting and ending with 3.');
-    const { data: code } = await supabase.rpc('next_doc_number', { p_doc_type: 'VENDOR' });
+    const { data: code } = await supabase.rpc('next_master_code', { p_doc_type: 'VENDOR' });
     const { error } = await supabase.from('vendors').insert({
       id: `vend-${Date.now()}`,
       vendor_code: code,
@@ -531,7 +531,7 @@ export function ItemsMasterView({ supabase, items, customUoms, vendors, customer
 
   const handleSaveItem = async (e) => {
     e.preventDefault();
-    const docKey = form.item_type === 'Service' ? 'ITEM_SERVICE' : 'ITEM_GOODS'; const { data: itemCode } = await supabase.rpc('next_doc_number', { p_doc_type: docKey });
+    const docKey = form.item_type === 'Service' ? 'ITEM_SERVICE' : 'ITEM_GOODS'; const { data: itemCode } = await supabase.rpc('next_master_code', { p_doc_type: docKey });
 
     await supabase.from('items').insert({
       id: `item-${Date.now()}`,

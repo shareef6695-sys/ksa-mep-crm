@@ -306,7 +306,16 @@ function useErpCore() {
       if (s?.user) loadProfiles(s.user);
       else setAuthLoading(false);
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
+      // Passwords are reset by an administrator (Team & Salesmen -> Reset password). A Supabase recovery link would
+      // otherwise sign its holder straight in, so it is closed again without showing any data.
+      if (event === 'PASSWORD_RECOVERY') {
+        supabase.auth.signOut();
+        setSession(null);
+        setAuthLoading(false);
+        window.alert('Password reset links are not used in this app. Ask your administrator to reset your password.');
+        return;
+      }
       setSession(s);
       if (s?.user) loadProfiles(s.user);
       else setAuthLoading(false);

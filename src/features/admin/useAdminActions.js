@@ -109,7 +109,7 @@ export function useAdminActions(s) {
   const handleQuickCreateCustomer = async (e) => {
     e.preventDefault();
     const id = `cust-${Date.now()}`;
-    const { data: code } = await supabase.rpc('next_doc_number', { p_doc_type: 'CUSTOMER' });
+    const { data: code } = await supabase.rpc('next_master_code', { p_doc_type: 'CUSTOMER' });
     await supabase.from('customers').insert({
       id,
       customer_code: code,
@@ -133,7 +133,7 @@ export function useAdminActions(s) {
   const handleQuickCreateVendor = async (e) => {
     e.preventDefault();
     const id = `vend-${Date.now()}`;
-    const { data: code } = await supabase.rpc('next_doc_number', { p_doc_type: 'VENDOR' });
+    const { data: code } = await supabase.rpc('next_master_code', { p_doc_type: 'VENDOR' });
     await supabase.from('vendors').insert({
       id,
       vendor_code: code,
@@ -155,7 +155,7 @@ export function useAdminActions(s) {
   const handleQuickCreateItem = async (e) => {
     e.preventDefault();
     const id = `item-${Date.now()}`;
-    const qDocKey = quickItem.item_type === 'Service' ? 'ITEM_SERVICE' : 'ITEM_GOODS'; const { data: item_code } = await supabase.rpc('next_doc_number', { p_doc_type: qDocKey });
+    const qDocKey = quickItem.item_type === 'Service' ? 'ITEM_SERVICE' : 'ITEM_GOODS'; const { data: item_code } = await supabase.rpc('next_master_code', { p_doc_type: qDocKey });
     await supabase.from('items').insert({
       id,
       item_code,
