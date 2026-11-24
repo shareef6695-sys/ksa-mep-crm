@@ -11,6 +11,7 @@
 //   action "set_role"        { user_id, role_key, division?, is_salesman?, commission_pct? }
 //   action "set_status"      { user_id, active }        -> also blocks / unblocks sign-in
 //   action "reset_password"  { user_id, password }
+//   action "erase"           { user_id, reason }        -> right to erasure: anonymise profile + login, block sign-in
 //
 // Deploy:  supabase functions deploy admin-users
 // (SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY are provided automatically.)
@@ -172,6 +173,24 @@ async function setStatus(admin: SupabaseClient, body: Record<string, unknown>, c
   return { user_id: userId, active };
 }
 
+async function eraseMember(admin: SupabaseClient, body: Record<string, unknown>, callerId: string) {
+  const userId = validUuid(body.user_id);
+  if (userId === callerId) throw new HttpError(400, 'You cannot erase your own account.');
+  const reason = str(body.reason, 500) || 'Not given';
+  // 1. database: profile, role, audit trail, erasure record (0020). Runs as the service role; the caller is checked above.
+  const { data, error } = await admin.rpc('erase_personal_data', { p_kind: 'team_member', p_id: userId, p_reason: reason, p_by: callerId });
+  if (error) throw new HttpError(400, error.message);
+  // 2. the login: no real email or name left, and blocked for good (a ban also ends current sessions)
+  const { error: authErr } = await admin.auth.admin.updateUserById(userId, {
+    email: `erased-${userId}@erased.invalid`,
+    email_confirm: true,
+    user_metadata: { full_name: null, phone: null },
+    ban_duration: BAN_FOREVER,
+  });
+  if (authErr) throw new HttpError(500, 'The profile was erased but the login could not be anonymised. Press Erase again.');
+  return { user_id: userId, erased: true, counts: data };
+}
+
 async function resetPassword(admin: SupabaseClient, body: Record<string, unknown>) {
   const userId = validUuid(body.user_id);
   const password = validPassword(body.password);
@@ -200,6 +219,8 @@ Deno.serve(async (req) => {
         return json(200, { ok: true, ...(await setRole(admin, body)) });
       case 'set_status':
         return json(200, { ok: true, ...(await setStatus(admin, body, callerId)) });
+      case 'erase':
+        return json(200, { ok: true, ...(await eraseMember(admin, body, callerId)) });
       case 'reset_password':
         return json(200, { ok: true, ...(await resetPassword(admin, body)) });
       default:

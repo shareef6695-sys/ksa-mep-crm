@@ -272,7 +272,7 @@ export function GlobalSmartDiscoveryModal({
       category: tm.is_salesman ? 'Salesman' : 'Team Member',
       code: tm.role_key?.toUpperCase(),
       title: tm.full_name,
-      subtitle: `${tm.email} • ${tm.role_label} • Profit Share: ${tm.commission_pct || 0}%`,
+      subtitle: [tm.email, tm.role_label, tm.commission_pct == null ? null : `Profit Share: ${tm.commission_pct}%`].filter(Boolean).join(' • '),
       modId: 'settings',
       subId: 'set_salesmen',
     })),

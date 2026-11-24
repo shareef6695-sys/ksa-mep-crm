@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { eraseParty } from '../lib/erasure';
 import { Plus, Users, Truck, Package, CheckCircle2, X, Building2, FileUp } from 'lucide-react';
 import { CustomerImportModal } from '../features/sales/CustomerImportModal';
 import { MasterImportModal } from '../features/master/MasterImportModal';
@@ -33,7 +34,7 @@ export const ZATCA_VAT_TYPES = [
 // ============================================================================
 // 1. CUSTOMERS MASTER VIEW (UNDER SALES & FULFILLMENT)
 // ============================================================================
-export function CustomersMasterView({ supabase, customers, salesmenList, onRefresh, readOnly = false, canImport = false }) {
+export function CustomersMasterView({ supabase, customers, salesmenList, onRefresh, readOnly = false, canImport = false, canErase = false }) {
   const [showForm, setShowForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [form, setForm] = useState({
@@ -165,7 +166,7 @@ export function CustomersMasterView({ supabase, customers, salesmenList, onRefre
               <select value={form.assigned_salesman_id} onChange={(e) => setForm({ ...form, assigned_salesman_id: e.target.value })} className="w-full border border-slate-300 rounded-xl px-3 py-2 bg-white">
                 <option value="">Unassigned</option>
                 {salesmenList.map((s) => (
-                  <option key={s.id} value={s.id}>{s.full_name} ({s.commission_pct || 0}%)</option>
+                  <option key={s.id} value={s.id}>{s.full_name}{s.commission_pct == null ? '' : ` (${s.commission_pct}%)`}</option>
                 ))}
               </select>
             </div>
@@ -248,9 +249,15 @@ export function CustomersMasterView({ supabase, customers, salesmenList, onRefre
                 <h3 className="text-base font-bold mt-1">{c.name_en} {c.name_ar && <span className="text-sm font-normal text-slate-500" dir="rtl">({c.name_ar})</span>}</h3>
                 <p className="text-xs text-slate-500">{[c.contact_person, c.phone || c.email, c.city, c.payment_terms && `Terms: ${c.payment_terms}`].filter(Boolean).join(' • ')}</p>
               </div>
-              <div className="text-right text-xs">
+              <div className="text-right text-xs space-y-1">
                 <div className="text-slate-400">Credit Limit</div>
                 <div className="font-bold text-slate-900">SAR {formatSAR(c.credit_limit_sar)}</div>
+                {c.personal_data_erased_at ? (
+                  <div className="text-slate-400">Personal data erased</div>
+                ) : canErase && (
+                  <button type="button" onClick={async () => { if (await eraseParty(supabase, 'customer', c)) onRefresh(); }}
+                    className="px-2 py-1 rounded-lg border border-rose-300 text-rose-700 font-semibold cursor-pointer">Erase personal data</button>
+                )}
               </div>
             </div>
           ))}
@@ -263,7 +270,7 @@ export function CustomersMasterView({ supabase, customers, salesmenList, onRefre
 // ============================================================================
 // 2. VENDORS / SUPPLIERS MASTER VIEW (UNDER PURCHASE FULL CYCLE)
 // ============================================================================
-export function VendorsMasterView({ supabase, vendors, currencies, onRefresh, readOnly = false, canImport = false }) {
+export function VendorsMasterView({ supabase, vendors, currencies, onRefresh, readOnly = false, canImport = false, canErase = false }) {
   const [showForm, setShowForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [form, setForm] = useState({
@@ -461,8 +468,14 @@ export function VendorsMasterView({ supabase, vendors, currencies, onRefresh, re
                   {v.vat_number && <span className="text-xs font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">VAT: {v.vat_number}</span>}
                 </div>
                 <h3 className="text-base font-bold mt-1">{v.name_en}</h3>
-                <p className="text-xs text-slate-500">{v.contact_person} • {v.phone} • {v.city}, {v.country} • {v.payment_terms}</p>
+                <p className="text-xs text-slate-500">{[v.contact_person, v.phone, [v.city, v.country].filter(Boolean).join(', '), v.payment_terms].filter(Boolean).join(' • ')}</p>
               </div>
+              {v.personal_data_erased_at ? (
+                <div className="text-xs text-slate-400">Personal data erased</div>
+              ) : canErase && (
+                <button type="button" onClick={async () => { if (await eraseParty(supabase, 'vendor', v)) onRefresh(); }}
+                  className="px-2 py-1 rounded-lg border border-rose-300 text-rose-700 text-xs font-semibold cursor-pointer">Erase personal data</button>
+              )}
             </div>
           ))}
         </div>

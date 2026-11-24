@@ -26,6 +26,7 @@ export default function SalesScreens() {
             <CustomersMasterView
               readOnly={!can(profile, 'customer.create')}
               canImport={can(profile, 'customer.import')}
+              canErase={can(profile, 'privacy.erase')}
               supabase={supabase}
               customers={customers}
               salesmenList={salesmenList}

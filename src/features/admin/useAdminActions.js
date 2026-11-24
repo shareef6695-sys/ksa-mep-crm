@@ -1,5 +1,6 @@
 // Team members, quick-create master data, company settings — handlers moved verbatim from App.jsx (Prompt 15). `s` is the store built so far.
 import { ROLE_OPTIONS } from '../../app/constants';
+import { confirmErasure } from '../../lib/erasure';
 import { supabase } from '../../lib/supabase';
 
 
@@ -85,6 +86,13 @@ export function useAdminActions(s) {
     const verb = nextActive ? 'Reactivate' : 'Deactivate';
     if (!window.confirm(`${verb} ${member.full_name}? ${nextActive ? 'They will be able to sign in again.' : 'They will be signed out and blocked from signing in.'}`)) return;
     runMemberAction('set_status', { user_id: member.id, active: nextActive }, `${member.full_name} ${nextActive ? 'reactivated' : 'deactivated'}.`);
+  };
+
+  // Right to erasure: anonymise the profile, remove the login's email and phone, block sign-in (admin-users "erase")
+  const handleEraseMember = (member) => {
+    const reason = confirmErasure(member.full_name || member.email || 'this team member');
+    if (!reason) return;
+    runMemberAction('erase', { user_id: member.id, reason }, 'Personal data erased. The account is anonymised and blocked; documents keep the old salesman name where the law requires it.');
   };
 
   const handleResetMemberPassword = (member) => {
@@ -209,5 +217,5 @@ export function useAdminActions(s) {
   };
 
 
-  return { callAdminUsers, handleChangeMemberRole, handleCreateTeamMember, handleQuickCreateCustomer, handleQuickCreateItem, handleQuickCreateVendor, handleResetMemberPassword, handleSaveCompanySettings, handleToggleMemberActive, handleUpdateSalesmanRule, runMemberAction };
+  return { callAdminUsers, handleEraseMember, handleChangeMemberRole, handleCreateTeamMember, handleQuickCreateCustomer, handleQuickCreateItem, handleQuickCreateVendor, handleResetMemberPassword, handleSaveCompanySettings, handleToggleMemberActive, handleUpdateSalesmanRule, runMemberAction };
 }

@@ -49,8 +49,9 @@ if (dist) {
       try { role = JSON.parse(Buffer.from(jwt.split('.')[1], 'base64url').toString()).role; } catch { /* not a JWT */ }
       if (role !== 'anon') problems.push(`${file}: JWT with role "${role}" in the browser bundle`);
     }
-    for (const [name, re] of RULES.slice(1)) {
-      if (name.startsWith('Supabase') && /sb_publishable_/.test(text) && !/sb_secret_/.test(text)) continue;
+    // the publishable key belongs in the bundle; a secret key (sb_secret_ + key material) never does
+    if (/\bsb_secret_[A-Za-z0-9_-]{10,}/.test(text)) problems.push(`${file}: Supabase secret key in the browser bundle`);
+    for (const [name, re] of RULES.slice(2)) {
       if (re.test(text)) problems.push(`${file}: ${name} in the browser bundle`);
     }
   }

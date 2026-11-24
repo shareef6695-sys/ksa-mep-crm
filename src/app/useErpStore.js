@@ -316,7 +316,8 @@ function useErpCore() {
 
   const loadProfiles = async (user) => {
     const [{ data: all }, roleRes] = await Promise.all([
-      supabase.from('team_profiles').select('*').order('full_name'),
+      // team_profiles_v (0020): everyone sees names and roles; contacts and commission only where the role allows
+      supabase.from('team_profiles_v').select('*').order('full_name').then((r) => (r.error ? supabase.from('team_profiles').select('*').order('full_name') : r)),
       supabase.from('user_roles').select('role, division, active').eq('user_id', user.id).maybeSingle(),
     ]);
     if (all) setTeamProfiles(all);
@@ -355,7 +356,7 @@ function useErpCore() {
     { key: 'purchase_orders', table: 'purchase_orders', order: [['created_at', false], ['id', true]], set: setPurchaseOrders },
     { key: 'customer_receipts', table: 'customer_receipts', order: [['received_at', false], ['id', true]], set: setReceipts },
     { key: 'commission_ledger', view: 'commission_ledger_v', table: 'commission_ledger', order: [['updated_at', false], ['id', true]], set: setCommissions },
-    { key: 'team_profiles', table: 'team_profiles', order: [['full_name', true], ['id', true]], set: setTeamProfiles },
+    { key: 'team_profiles', view: 'team_profiles_v', table: 'team_profiles', order: [['full_name', true], ['id', true]], set: setTeamProfiles },
     { key: 'customers', table: 'customers', order: [['name_en', true], ['id', true]], set: setCustomers },
     { key: 'vendors', table: 'vendors', order: [['name_en', true], ['id', true]], set: setVendors },
     { key: 'items', view: 'items_v', table: 'items', order: [['name_en', true], ['id', true]], set: setItems },
@@ -402,7 +403,7 @@ function useErpCore() {
         cfg.set([]);
         return 'missing';
       }
-      console.error(`Loading ${cfg.key} failed`, res.error);
+      console.error(`Loading ${cfg.key} failed`, { code: res.error.code, message: res.error.message }); // no row details: they can hold personal data
       return 'error'; // keep what's on screen
     }
     cfg.set(res.data);
@@ -521,8 +522,8 @@ function useErpCore() {
         id: s.id,
         badge: s.division || 'SALES',
         label: s.full_name,
-        sublabel: `${s.role_label} • ${s.email}`,
-        rightMeta: `${s.commission_pct || 0}% Share`,
+        sublabel: [s.role_label, s.email].filter(Boolean).join(' • '),
+        rightMeta: s.commission_pct == null ? '' : `${s.commission_pct}% Share`,
       })),
     [salesmenList]
   );
