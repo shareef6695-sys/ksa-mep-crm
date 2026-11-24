@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Plus, Users, Truck, Package, CheckCircle2, X, Building2, FileUp } from 'lucide-react';
 import { CustomerImportModal } from '../features/sales/CustomerImportModal';
+import { MasterImportModal } from '../features/master/MasterImportModal';
 import { formatSAR, isValidKsaVat, VAT_EXEMPTION_REASONS } from './erpEngine';
 
 export const STANDARD_UOMS = [
@@ -262,8 +263,9 @@ export function CustomersMasterView({ supabase, customers, salesmenList, onRefre
 // ============================================================================
 // 2. VENDORS / SUPPLIERS MASTER VIEW (UNDER PURCHASE FULL CYCLE)
 // ============================================================================
-export function VendorsMasterView({ supabase, vendors, currencies, onRefresh, readOnly = false }) {
+export function VendorsMasterView({ supabase, vendors, currencies, onRefresh, readOnly = false, canImport = false }) {
   const [showForm, setShowForm] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [form, setForm] = useState({
     name_en: '',
     name_ar: '',
@@ -311,14 +313,27 @@ export function VendorsMasterView({ supabase, vendors, currencies, onRefresh, re
           <h2 className="text-base sm:text-lg font-bold text-slate-900">Vendors &amp; Suppliers Master</h2>
           <p className="text-xs text-slate-500">Manage local KSA (15% Input VAT) and international OEM/trading suppliers with default billing currencies &amp; IBANs.</p>
         </div>
-        <button
-          hidden={readOnly}
-          onClick={() => setShowForm(!showForm)}
-          className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
-        >
-          <Plus className="w-4 h-4" /> {showForm ? 'Close Form' : 'New Vendor'}
-        </button>
+        <div className="flex gap-2">
+          {canImport && (
+            <button
+              onClick={() => setShowImport(true)}
+              className="px-3.5 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+            >
+              <FileUp className="w-4 h-4" /> Import CSV
+            </button>
+          )}
+          <button
+            hidden={readOnly}
+            onClick={() => setShowForm(!showForm)}
+            className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+          >
+            <Plus className="w-4 h-4" /> {showForm ? 'Close Form' : 'New Vendor'}
+          </button>
+        </div>
       </div>
+      {showImport && (
+        <MasterImportModal kind="vendor" supabase={supabase} existing={vendors} onClose={() => setShowImport(false)} onImported={onRefresh} />
+      )}
 
       {showForm && !readOnly && (
         <form onSubmit={handleSaveVendor} className="bg-white border border-blue-200 rounded-2xl p-5 shadow-sm space-y-4 text-xs">
@@ -459,8 +474,9 @@ export function VendorsMasterView({ supabase, vendors, currencies, onRefresh, re
 // ============================================================================
 // 3. ITEMS MASTER VIEW (GOODS & SERVICES, STANDARD + CUSTOM UOM, ZATCA VAT)
 // ============================================================================
-export function ItemsMasterView({ supabase, items, customUoms, vendors, customers, currencies, onRefresh, readOnly = false }) {
+export function ItemsMasterView({ supabase, items, customUoms, vendors, customers, currencies, onRefresh, readOnly = false, canImport = false }) {
   const [showForm, setShowForm] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [showCustomUomInput, setShowCustomUomInput] = useState(false);
   const [customUomCode, setCustomUomCode] = useState('');
   const [customUomLabel, setCustomUomLabel] = useState('');
@@ -544,14 +560,27 @@ export function ItemsMasterView({ supabase, items, customUoms, vendors, customer
           <h2 className="text-base sm:text-lg font-bold text-slate-900">Items Master (Goods &amp; Services Catalog)</h2>
           <p className="text-xs text-slate-500">Define Goods or Services with Standard/Custom UOMs, mandatory Sales &amp; Purchase prices, ZATCA VAT categories, and Supplier/Customer links.</p>
         </div>
-        <button
-          hidden={readOnly}
-          onClick={() => setShowForm(!showForm)}
-          className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
-        >
-          <Plus className="w-4 h-4" /> {showForm ? 'Close Form' : 'New Item / Service'}
-        </button>
+        <div className="flex gap-2">
+          {canImport && (
+            <button
+              onClick={() => setShowImport(true)}
+              className="px-3.5 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+            >
+              <FileUp className="w-4 h-4" /> Import CSV
+            </button>
+          )}
+          <button
+            hidden={readOnly}
+            onClick={() => setShowForm(!showForm)}
+            className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+          >
+            <Plus className="w-4 h-4" /> {showForm ? 'Close Form' : 'New Item / Service'}
+          </button>
+        </div>
       </div>
+      {showImport && (
+        <MasterImportModal kind="item" supabase={supabase} existing={items} onClose={() => setShowImport(false)} onImported={onRefresh} />
+      )}
 
       {showForm && !readOnly && (
         <form onSubmit={handleSaveItem} className="bg-white border border-blue-200 rounded-2xl p-5 shadow-sm space-y-4 text-xs">
