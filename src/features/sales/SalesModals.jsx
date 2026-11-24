@@ -122,11 +122,14 @@ export default function SalesModals() {
                     <input
                       type="number"
                       value={item.qty}
-                      onChange={(e) =>
+                      min="0.0001"
+                      onChange={(e) => {
+                        const qty = parseFloat(e.target.value);
+                        if (!(qty > 0)) return; // the database refuses zero / negative lines (0023); wait for a real quantity
                         saveInquiryPatch(selectedInq, {
-                          boqItems: selectedInq.boqItems.map((b) => (b.id === item.id ? { ...b, qty: parseFloat(e.target.value) || 0 } : b)),
-                        })
-                      }
+                          boqItems: selectedInq.boqItems.map((b) => (b.id === item.id ? { ...b, qty } : b)),
+                        });
+                      }}
                       className="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5"
                       placeholder="Qty"
                     />
@@ -149,11 +152,14 @@ export default function SalesModals() {
                           step="0.01"
                           value={item.buyUnitCost}
                           disabled={!userCanPriceQuotes}
-                          onChange={(e) =>
+                          min="0"
+                          onChange={(e) => {
+                            const cost = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                            if (!(cost >= 0)) return; // no negative costs (0023)
                             saveInquiryPatch(selectedInq, {
-                              boqItems: selectedInq.boqItems.map((b) => (b.id === item.id ? { ...b, buyUnitCost: parseFloat(e.target.value) || 0 } : b)),
-                            })
-                          }
+                              boqItems: selectedInq.boqItems.map((b) => (b.id === item.id ? { ...b, buyUnitCost: cost } : b)),
+                            });
+                          }}
                           className="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5"
                           placeholder="Unit Cost"
                         />
@@ -182,7 +188,13 @@ export default function SalesModals() {
                           type="number"
                           value={selectedInq.marginPercent}
                           disabled={!userCanPriceQuotes}
-                          onChange={(e) => saveInquiryPatch(selectedInq, { marginPercent: parseFloat(e.target.value) || 0 })}
+                          min="-99"
+                          max="99"
+                          onChange={(e) => {
+                            const m = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                            if (!(m > -100 && m < 100)) return; // margin must stay inside -100 .. 100 (0023)
+                            saveInquiryPatch(selectedInq, { marginPercent: m });
+                          }}
                           className="w-20 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-right font-bold text-amber-300"
                         />
                       </div>
