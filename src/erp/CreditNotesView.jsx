@@ -32,6 +32,7 @@ export function CreditNotesView({
   const [selectedInvId, setSelectedInvId] = useState('');
   const [reason, setReason] = useState('Sales Return / Defective Material');
   const [returnQtys, setReturnQtys] = useState({});
+  const [replacement, setReplacement] = useState(false); // 0024: reopen the returned qty on the sales order
   const [previewCN, setPreviewCN] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [creditedQty, setCreditedQty] = useState([]); // already credited per invoice line (0006)
@@ -58,6 +59,7 @@ export function CreditNotesView({
   const handleSelectInvoice = async (invId) => {
     setSelectedInvId(invId);
     setReturnQtys({});
+    setReplacement(false);
     setCreditedQty([]);
     if (!invId) return;
     const { data, error } = await supabase.rpc('invoice_credited_qty', { p_invoice_id: invId });
@@ -78,6 +80,7 @@ export function CreditNotesView({
         p_return_qtys: qtys,
         p_reason: reason,
         p_reason_code: REASONS.find((r) => r.label === reason)?.code || 'OTHER',
+        p_replacement: Boolean(replacement && selectedInvoice.dn_id),
       });
       if (error) {
         window.alert(`Credit note could not be issued: ${error.message}`);
@@ -144,7 +147,7 @@ export function CreditNotesView({
                 </div>
                 <h3 className="text-base font-bold mt-1">{cn.client_name}</h3>
                 <p className="text-xs text-slate-500">
-                  Reason: <strong>{cn.reason}</strong> • Reversed Total: <strong className="text-rose-700">- SAR {formatSAR(cn.grand_total_sar)}</strong>
+                  Reason: <strong>{cn.reason}</strong>{cn.replacement && <> • <strong className="text-blue-700">replacement to follow</strong></>} • Reversed Total: <strong className="text-rose-700">- SAR {formatSAR(cn.grand_total_sar)}</strong>
                 </p>
               </div>
 
@@ -229,6 +232,16 @@ export function CreditNotesView({
                     </div>
                   ))}
                 </div>
+              )}
+
+              {selectedInvoice?.dn_id && (
+                <label className="flex items-start gap-2 p-3 rounded-xl border border-slate-200 cursor-pointer">
+                  <input type="checkbox" className="mt-0.5 w-4 h-4" checked={replacement} onChange={(e) => setReplacement(e.target.checked)} />
+                  <span>
+                    <span className="font-bold text-slate-700">Replacement to follow</span>
+                    <span className="block text-slate-500">Reopens the returned quantity on {selectedInvoice.so_number || 'the sales order'} so the replacement can be delivered and invoiced against it.</span>
+                  </span>
+                </label>
               )}
 
               <button

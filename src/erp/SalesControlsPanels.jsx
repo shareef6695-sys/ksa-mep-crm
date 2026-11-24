@@ -92,7 +92,7 @@ export function QuoteControls({ supabase, inquiry, approval, canApprove, canEdit
 }
 
 /** Customers' credit position and Finance's one-time overrides. */
-export function CreditControlPanel({ supabase, customers = [], inquiries = [], deliveryNotes = [], invoices = [], salesOrders = [], canOverride, settings }) {
+export function CreditControlPanel({ supabase, customers = [], inquiries = [], salesOrders = [], canOverride, settings }) {
   const [rows, setRows] = useState([]);
   const [form, setForm] = useState({ docType: 'SO', refId: '', reason: '' });
   const [msg, setMsg] = useState('');
@@ -107,12 +107,9 @@ export function CreditControlPanel({ supabase, customers = [], inquiries = [], d
   useEffect(() => {
     load();
   }, [load]);
-  const invoicedDn = new Set(invoices.map((i) => i.dn_id));
   const refs = form.docType === 'SO'
     ? inquiries.filter((q) => !['won', 'lost'].includes(q.stage)).map((q) => ({ id: q.id, label: `${q.refNo || q.id} — ${q.clientName}` }))
-    : form.docType === 'INVOICE'
-      ? deliveryNotes.filter((d) => !invoicedDn.has(d.id)).map((d) => ({ id: d.id, label: `${d.dn_number} — ${d.client_name}` }))
-      : salesOrders.filter((s) => !['cancelled', 'delivered'].includes(s.status)).map((s) => ({ id: s.id, label: `${s.so_number} — ${s.client_name}` }));
+    : salesOrders.filter((s) => !['cancelled', 'delivered'].includes(s.status)).map((s) => ({ id: s.id, label: `${s.so_number} — ${s.client_name}` }));
   const grant = async (e) => {
     e.preventDefault();
     setMsg('');
@@ -127,7 +124,7 @@ export function CreditControlPanel({ supabase, customers = [], inquiries = [], d
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3 text-xs">
       <div className="font-bold text-sm">Credit control</div>
-      <p className="text-slate-500">New sales orders and invoices are refused when open receivables + open orders + the new amount exceed the customer's credit limit, or when an invoice is more than {settings?.overdueBlockDays ?? 90} days past due.</p>
+      <p className="text-slate-500">New sales orders are refused when open receivables + open orders + the new amount exceed the customer's credit limit. New sales orders and deliveries are refused when an invoice is more than {settings?.overdueBlockDays ?? 90} days past due. Goods already delivered can always be invoiced.</p>
       {rows.length > 0 && (
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -147,10 +144,10 @@ export function CreditControlPanel({ supabase, customers = [], inquiries = [], d
       {canOverride && (
         <form onSubmit={grant} className="grid grid-cols-12 gap-2 items-center border-t pt-3">
           <select value={form.docType} onChange={(e) => setForm({ ...form, docType: e.target.value, refId: '' })} className="col-span-12 sm:col-span-3 border border-slate-300 rounded-lg px-2 py-1.5 bg-white">
-            <option value="SO">Override for a new sales order</option><option value="INVOICE">Override for an invoice</option><option value="SO_AMEND">Override for an SO increase</option>
+            <option value="SO">Override for a new sales order</option><option value="DELIVERY">Override for a delivery</option><option value="SO_AMEND">Override for an SO increase</option>
           </select>
           <select required value={form.refId} onChange={(e) => setForm({ ...form, refId: e.target.value })} className="col-span-12 sm:col-span-4 border border-slate-300 rounded-lg px-2 py-1.5 bg-white">
-            <option value="">{form.docType === 'SO' ? 'Quote…' : form.docType === 'INVOICE' ? 'Delivery note…' : 'Sales order…'}</option>
+            <option value="">{form.docType === 'SO' ? 'Quote…' : 'Sales order…'}</option>
             {refs.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
           </select>
           <input required value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} placeholder="Reason (guarantee, CFO approval…) *" className="col-span-12 sm:col-span-3 border border-slate-300 rounded-lg px-2 py-1.5" />

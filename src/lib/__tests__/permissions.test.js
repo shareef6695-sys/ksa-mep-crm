@@ -55,6 +55,7 @@ describe('module access (must match 0002_roles_rls.sql)', () => {
 describe('actions', () => {
   it('matches who may write each table', () => {
     expect(ROLES.filter((r) => can(p(r), 'delivery.create'))).toEqual(['admin', 'ceo', 'procurement']);
+    expect(ROLES.filter((r) => can(p(r), 'delivery.reverse'))).toEqual(['admin', 'ceo', 'manager']);
     expect(ROLES.filter((r) => can(p(r), 'invoice.create'))).toEqual(['admin', 'ceo', 'finance']);
     expect(ROLES.filter((r) => can(p(r), 'po.bill'))).toEqual(['admin', 'ceo', 'finance']);
     expect(ROLES.filter((r) => can(p(r), 'po.create'))).toEqual(['admin', 'ceo', 'procurement']);

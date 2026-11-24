@@ -1,4 +1,5 @@
 // Sales screens — moved verbatim from App.jsx (Prompt 15). Data and handlers come from the store (useErp).
+import { useState } from 'react';
 import { useErp } from '../../app/ErpContext';
 import { Plus, QrCode, Receipt, Truck } from 'lucide-react';
 import { CommissionPayoutPanel } from '../../erp/CommissionPayoutPanel';
@@ -16,10 +17,15 @@ import { SmartFilterBar } from '../../ui/SmartFilterBar';
 
 export default function SalesScreens() {
   const { commissions, company, creditNotes, customers, debitNotes, deliveryNotes, fxRates, glAccounts, handleConvertQuoteToSO,
-    handleGenerateZatcaInvoiceFromDN, handleSubmitToZatca, inquiries, invoices, itemsById, lang, openDeliveryModal,
+    handleGenerateZatcaInvoiceFromDN, handleInvoiceDeliveries, handleReverseDelivery, handleSubmitToZatca, inquiries, invoices, itemsById, lang, openDeliveryModal,
     openInvoicePrint, openObject, profile, quoteApprovals, refreshAllErpData, salesOrders, salesSettings, salesmenList, setAmendSO,
     setPaymentAmount, setPaymentModalInv, setPreviewDN, setPreviewQuotation, setPreviewSO, setSelectedInqId, setShowNewInqModal,
     userCanPriceQuotes, userCanViewCost, view, zatcaBusyId } = useErp();
+  const [pickedDn, setPickedDn] = useState([]); // delivery notes picked for one combined invoice (0024)
+  const dnInvoiced = (dn) => Boolean(dn.invoice_id) || invoices.some((inv) => inv.dn_id === dn.id || (inv.dn_ids || []).includes(dn.id));
+  const pickedNotes = deliveryNotes.filter((d) => pickedDn.includes(d.id));
+  const pickedSoId = pickedNotes[0]?.so_id;
+  const togglePick = (dn) => setPickedDn((cur) => (cur.includes(dn.id) ? cur.filter((x) => x !== dn.id) : [...cur, dn.id]));
   return (
     <>
           {view === 'sales_customers' && (
@@ -34,7 +40,7 @@ export default function SalesScreens() {
             />
           )}
           {view === 'sales_customers' && can(profile, 'credit.view') && (
-            <CreditControlPanel supabase={supabase} customers={customers} inquiries={inquiries} deliveryNotes={deliveryNotes} invoices={invoices}
+            <CreditControlPanel supabase={supabase} customers={customers} inquiries={inquiries}
               salesOrders={salesOrders} canOverride={can(profile, 'credit.override')} settings={salesSettings} />
           )}
           {view === 'sales_pipeline' && <SalesPipelineView supabase={supabase} />}
@@ -144,6 +150,9 @@ export default function SalesScreens() {
                             <span className="text-xs font-semibold uppercase px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
                               {so.status.replace('_', ' ')}
                             </span>
+                            {(so.items || []).some((it) => Number(it.invoicedQty || 0) < Number(it.deliveredQty || 0)) && (
+                              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">delivered, not invoiced</span>
+                            )}
                           </div>
                           <h3 className="text-base font-bold mt-1">{so.client_name}</h3>
                           <p className="text-xs text-slate-500">
@@ -172,6 +181,7 @@ export default function SalesScreens() {
                               <th className="p-2 text-right">Ordered</th>
                               <th className="p-2 text-right">Delivered</th>
                               <th className="p-2 text-right">Pending</th>
+                              <th className="p-2 text-right">Invoiced</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100">
@@ -183,6 +193,7 @@ export default function SalesScreens() {
                                   <td className="p-2 text-right">{it.orderedQty} {it.unit}</td>
                                   <td className="p-2 text-right text-emerald-600 font-semibold">{it.deliveredQty || 0}</td>
                                   <td className="p-2 text-right text-amber-600 font-semibold">{pending}</td>
+                                  <td className={`p-2 text-right font-semibold ${Number(it.invoicedQty || 0) < Number(it.deliveredQty || 0) ? 'text-rose-600' : 'text-slate-700'}`}>{it.invoicedQty || 0}</td>
                                 </tr>
                               );
                             })}
@@ -201,8 +212,17 @@ export default function SalesScreens() {
             <div className="space-y-4">
               <div>
                 <h2 className="text-base sm:text-lg font-bold text-slate-900">Delivery Notes (Full &amp; Partial Dispatches)</h2>
-                <p className="text-xs text-slate-500">Issue ZATCA Tax Invoices directly against completed Delivery Notes.</p>
+                <p className="text-xs text-slate-500">Issue a ZATCA Tax Invoice for one delivery note, or tick several notes of the same sales order and invoice them together.</p>
               </div>
+              {can(profile, 'invoice.create') && pickedNotes.length > 0 && (
+                <div className="sticky top-0 z-10 bg-slate-900 text-white rounded-2xl px-4 py-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <span><strong>{pickedNotes.length}</strong> delivery note{pickedNotes.length > 1 ? 's' : ''} of {pickedNotes[0]?.so_number} selected: {pickedNotes.map((d) => d.dn_number).join(', ')}</span>
+                  <span className="flex gap-2">
+                    <button type="button" onClick={() => setPickedDn([])} className="px-3 py-1.5 rounded-lg border border-white/40 cursor-pointer">Clear</button>
+                    <button type="button" onClick={async () => { if (await handleInvoiceDeliveries(pickedDn)) setPickedDn([]); }} className="px-3 py-1.5 rounded-lg bg-white text-slate-900 font-semibold inline-flex items-center gap-1 cursor-pointer"><Receipt className="w-4 h-4" /> Issue one invoice</button>
+                  </span>
+                </div>
+              )}
 
               {deliveryNotes.length === 0 ? (
                 <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-slate-500">
@@ -213,9 +233,18 @@ export default function SalesScreens() {
                 {(rows) => (
                 <div className="grid gap-3">
                   {rows.map((dn) => {
-                    const alreadyInvoiced = invoices.some((inv) => inv.dn_id === dn.id);
+                    const alreadyInvoiced = dnInvoiced(dn);
+                    const reversed = Boolean(dn.reversed_at);
+                    const pickable = !alreadyInvoiced && !reversed && can(profile, 'invoice.create');
                     return (
-                      <div key={dn.id} className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3">
+                      <div key={dn.id} className={`bg-white border rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 ${pickedDn.includes(dn.id) ? 'border-slate-900 ring-1 ring-slate-900' : 'border-slate-200'} ${reversed ? 'opacity-60' : ''}`}>
+                        <div className="flex items-start gap-3">
+                        {pickable && (
+                          <input type="checkbox" aria-label={`Select ${dn.dn_number} for a combined invoice`} className="mt-1 w-4 h-4 cursor-pointer"
+                            checked={pickedDn.includes(dn.id)} disabled={Boolean(pickedSoId) && pickedSoId !== dn.so_id}
+                            title={pickedSoId && pickedSoId !== dn.so_id ? 'Only delivery notes of the same sales order go on one invoice' : 'Add to a combined invoice'}
+                            onChange={() => togglePick(dn)} />
+                        )}
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded">{dn.dn_number} <div className="mt-1 inline-flex flex-wrap items-center gap-1"><button type="button" onClick={(e) => { e.stopPropagation(); setPreviewDN(dn); }} className="no-print px-2 py-1 text-[11px] rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-semibold inline-flex items-center gap-1 cursor-pointer transition"><span>Preview A4 DN</span></button><ShareDocumentButtons company={company} customers={customers} docType="Delivery Note" docNumber={dn.dn_number} clientName={dn.client_name} division={dn.division} status={dn.status || "Dispatched"} compact /></div></span>
@@ -223,13 +252,22 @@ export default function SalesScreens() {
                             <span className="text-xs text-slate-500">Ref: {dn.so_number}</span>
                           </div>
                           <div className="font-bold text-sm mt-1">{dn.client_name}</div>
+                          {reversed && <div className="text-xs text-rose-700 mt-1">Reversed by {dn.reversed_by}: {dn.reversal_reason}</div>}
+                        </div>
                         </div>
 
-                        {alreadyInvoiced ? (
+                        {reversed ? (
+                          <span className="text-xs font-bold text-rose-700 bg-rose-50 px-3 py-1.5 rounded-xl">Reversed</span>
+                        ) : alreadyInvoiced ? (
                           <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-xl">
                             ✓ ZATCA Invoice Issued
                           </span>
                         ) : (
+                          <span className="flex flex-wrap gap-2">
+                          {can(profile, 'delivery.reverse') && (
+                            <button type="button" onClick={() => handleReverseDelivery(dn)}
+                              className="px-3.5 py-2 rounded-xl border border-rose-300 text-rose-700 hover:bg-rose-50 text-xs font-semibold cursor-pointer">Reverse</button>
+                          )}
                           <button
                             hidden={!can(profile, 'invoice.create')}
                             onClick={() => handleGenerateZatcaInvoiceFromDN(dn)}
@@ -237,6 +275,7 @@ export default function SalesScreens() {
                           >
                             <Receipt className="w-4 h-4" /> Issue ZATCA Tax Invoice
                           </button>
+                          </span>
                         )}
                       </div>
                     );

@@ -72,6 +72,7 @@ export const ACTION_ACCESS = {
   'credit.view': ['admin', 'ceo', 'finance', 'manager'],
   'credit.override': FIN,
   'delivery.create': ['admin', 'ceo', 'procurement'],
+  'delivery.reverse': ['admin', 'ceo', 'manager'], // undo a delivery note before it is invoiced (0024)
   'invoice.create': FIN,
   'receipt.create': FIN,
   'credit_note.create': FIN,

@@ -21,7 +21,7 @@ check() { # check <label> <psql args...>
   local out; out=$($P "$@" 2>&1)
   if echo "$out" | grep -q ' OK'; then echo "  ok   $label"; else echo "  FAIL $label"; echo "$out" | grep -E 'ERROR|CHECK' | head -3; FAIL=1; fi
 }
-ALL="0002_roles_rls 0003_audit_lock 0004_posting 0006_credit_receipts 0007_commissions 0008_reporting 0009_vat 0010_zatca_phase2 0011_inventory 0012_procurement 0013_sales_controls 0014_projects_contracts 0015_notifications 0016_billing_completion 0017_vat_view_invoker 0018_customer_import 0019_vendor_item_import 0020_personal_data 0021_rate_limits 0022_authz_hardening 0023_line_validation"
+ALL="0002_roles_rls 0003_audit_lock 0004_posting 0006_credit_receipts 0007_commissions 0008_reporting 0009_vat 0010_zatca_phase2 0011_inventory 0012_procurement 0013_sales_controls 0014_projects_contracts 0015_notifications 0016_billing_completion 0017_vat_view_invoker 0018_customer_import 0019_vendor_item_import 0020_personal_data 0021_rate_limits 0022_authz_hardening 0023_line_validation 0024_delivery_billing"
 
 echo "Suites on the full chain:"
 for t in rls_check audit_lock_check posting_check reporting_check; do
@@ -32,7 +32,7 @@ done
 echo "Commission suite (data before 0007):"
 fresh; mig 0002_roles_rls 0003_audit_lock 0004_posting 0006_credit_receipts
 $P -v part=pre -f supabase/tests/commission_check.sql >/dev/null 2>&1
-mig 0007_commissions 0008_reporting 0009_vat 0010_zatca_phase2 0011_inventory 0012_procurement 0013_sales_controls 0014_projects_contracts 0015_notifications 0016_billing_completion 0017_vat_view_invoker 0018_customer_import 0019_vendor_item_import 0020_personal_data 0021_rate_limits 0022_authz_hardening 0023_line_validation
+mig 0007_commissions 0008_reporting 0009_vat 0010_zatca_phase2 0011_inventory 0012_procurement 0013_sales_controls 0014_projects_contracts 0015_notifications 0016_billing_completion 0017_vat_view_invoker 0018_customer_import 0019_vendor_item_import 0020_personal_data 0021_rate_limits 0022_authz_hardening 0023_line_validation 0024_delivery_billing
 check commission_check -v part=check -f supabase/tests/commission_check.sql
 
 echo "Suites in their slot of the chain:"
@@ -52,6 +52,7 @@ mig 0020_personal_data; check personal_data_check -f supabase/tests/personal_dat
 mig 0021_rate_limits; check rate_limit_check -f supabase/tests/rate_limit_check.sql
 mig 0022_authz_hardening; check authz_check -f supabase/tests/authz_check.sql
 mig 0023_line_validation; check line_validation_check -f supabase/tests/line_validation_check.sql
+mig 0024_delivery_billing; check delivery_billing_check -f supabase/tests/delivery_billing_check.sql
 mig 0014_projects_contracts 0015_notifications 0016_billing_completion; echo "  ok   0014-0016 re-run"
 
 echo "VAT / ZATCA suites (posting + credit data only):"
