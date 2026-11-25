@@ -14,9 +14,10 @@ describe('vercel.json security headers', () => {
       expect(csp).toContain(hash);
     }
   });
-  it('loads nothing from third parties except the Supabase API', () => {
+  it('loads nothing from third parties except the Supabase API (Tokyo cloud or the Riyadh server)', () => {
     const hosts = csp.match(/https?:\/\/[^\s;]+|wss:\/\/[^\s;]+/g);
-    expect(hosts.every((h) => /\.supabase\.co$/.test(h))).toBe(true);
+    expect(hosts.every((h) => /\.supabase\.co$/.test(h) || /^(https|wss):\/\/api\.horizon-sa\.net$/.test(h))).toBe(true);
+    expect(csp).not.toMatch(/http:\/\/|ws:\/\//);
     expect(readFileSync('index.html', 'utf8')).not.toMatch(/https?:\/\//);
     expect(csp).not.toMatch(/unsafe-inline|unsafe-eval/);
   });
