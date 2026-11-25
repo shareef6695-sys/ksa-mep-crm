@@ -163,6 +163,25 @@ export function useSalesActions(s) {
     await afterInvoicePosted(inv);
   };
 
+  // 0024: several un-invoiced delivery notes of one sales order on one ZATCA invoice
+  const handleInvoiceDeliveries = async (dnIds) => {
+    if (!dnIds?.length) return null;
+    const inv = await callPosting('post_invoice_combined', { p_dn_ids: dnIds });
+    if (!inv) return null;
+    selectSubModule('sales', 'sales_invoices');
+    await afterInvoicePosted(inv);
+    return inv;
+  };
+
+  // 0024: undo a delivery note posted by mistake (before it is invoiced)
+  const handleReverseDelivery = async (dn) => {
+    const reason = window.prompt(`Reverse ${dn.dn_number}? The goods go back into stock and the quantities reopen on ${dn.so_number || 'the order'}.\n\nReason:`);
+    if (reason === null) return;
+    if (!reason.trim()) { alert('Give a reason for reversing the delivery note.'); return; }
+    const res = await callPosting('reverse_delivery_note', { p_dn_id: dn.id, p_reason: reason.trim() });
+    if (res) refreshAllErpData();
+  };
+
   // Project / contract invoices (0014) go through the same ZATCA step as delivery invoices
   const afterInvoicePosted = async (inv) => {
     // Phase 2: a B2B invoice is cleared by ZATCA before anyone sees or shares it; B2C is reported now (or by the queue)
@@ -215,5 +234,5 @@ export function useSalesActions(s) {
   };
 
 
-  return { afterInvoicePosted, handleConvertQuoteToSO, handleCreateInquiry, handleGenerateZatcaInvoiceFromDN, handleRecordCustomerPayment, handleRecordDelivery, handleSelectCustomerForInq, handleSelectItemForInq, handleSubmitToZatca, openDeliveryModal, openInvoicePrint, persistInquiry, saveInquiryPatch };
+  return { afterInvoicePosted, handleConvertQuoteToSO, handleCreateInquiry, handleGenerateZatcaInvoiceFromDN, handleInvoiceDeliveries, handleRecordCustomerPayment, handleReverseDelivery, handleRecordDelivery, handleSelectCustomerForInq, handleSelectItemForInq, handleSubmitToZatca, openDeliveryModal, openInvoicePrint, persistInquiry, saveInquiryPatch };
 }
